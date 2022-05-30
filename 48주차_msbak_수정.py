@@ -71,12 +71,14 @@ def find_max (t, u, total):
     
 def find_square (y=None, x=None, unit=None, \
                  im=None, chop=chop, find_min=find_min, find_max=find_max, \
-                 length=None, width=None):
+                 height=None, width=None):
     
     import numpy as np
-    square = im[find_min(y, unit):find_max(y, unit, length), find_min(x,unit):find_max(x, unit,width)]
-    extend_x = size - find_max(x, unit,width) + find_min(x,unit)
-    extend_y = size - find_max(y, unit,length) + find_min(y,unit)
+    square = im[np.max([0, y-unit]):np.min([height, y+unit]), np.max([0, x-unit]):np.min([width, x+unit])]
+    square = square / np.mean(square)
+    # plt.imshow(square)
+    extend_x = size - find_max(x, unit, width) + find_min(x,unit)
+    extend_y = size - find_max(y, unit, height) + find_min(y,unit)
     padding= np.lib.pad(square,((chop(extend_y)[0],chop(extend_y)[1]), (chop(extend_x)[0],chop(extend_x)[1]), (0,0)),'constant', constant_values=(255))
     return padding
 
@@ -124,8 +126,8 @@ def im_aug(crop, yin, zin):
     return xout, yout, zout
 
 def get_F1(threshold=None, contour_thr=None,\
-           height=None, width=None, yhat=None, \
-               Z_total_te=None, t_im=None, positive_indexs=None, polygon=None):
+           height=None, width=None, yhat_save=None, \
+               z_save=None, t_im=None, positive_indexs=None, polygon=None):
 
     import numpy as np
     # import cv2
@@ -133,10 +135,10 @@ def get_F1(threshold=None, contour_thr=None,\
     noback_img = np.zeros((height, width, 3), np.uint8)
     noback_img[:]= [255,255,0]
     
-    vix = np.where(yhat[:,1] > threshold)[0]
+    vix = np.where(np.array(yhat_save) > threshold)[0]
     for i in vix:
-        row = Z_total_te[i][0]
-        col = Z_total_te[i][1]
+        row = z_save[i][0]
+        col = z_save[i][1]
         noback_img[row,col] = [0,0,255]
 
     img_color = noback_img.copy()
@@ -287,26 +289,26 @@ def model_setup(xs=None, ys=None, lr=1e-4):
     # from tensorflow.keras.layers import BatchNormalization, Dropout
     from tensorflow.keras.optimizers import Adam
     model = models.Sequential()
-    model.add(layers.Conv2D(2**12, (4, 4), activation='relu', input_shape=xs))
+    model.add(layers.Conv2D(2**5, (4, 4), activation='relu', input_shape=xs))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**11, (3, 3), activation='relu'))
+    model.add(layers.Conv2D(2**5, (3, 3), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**10, (2, 2), activation='relu'))
+    model.add(layers.Conv2D(2**5, (2, 2), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
     
     # model.add(layers.Conv2D(2**8, (5, 5), activation='relu'))
     # model.add(layers.MaxPooling2D((2, 2)))
 
     model.add(layers.Flatten())
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='relu' ))
-    model.add(layers.Dense(2**6, activation='sigmoid') )
+    # model.add(layers.Dense(2**5, activation='relu' ))
+    # model.add(layers.Dense(2**5, activation='relu' ))
+    # model.add(layers.Dense(2**5, activation='relu' ))
+    # model.add(layers.Dense(2**5, activation='relu' ))
+    model.add(layers.Dense(2**5, activation='relu' ))
+    model.add(layers.Dense(2**5, activation='relu' ))
+    model.add(layers.Dense(2**5, activation='sigmoid') )
     model.add(layers.Dense(ys, activation='softmax'))
 
     # model.compile(optimizer='adam',
@@ -348,7 +350,7 @@ for n_num in tqdm(range(len(keylist))):
         marker_x = dictionary[n]['marker_x']
         marker_y = dictionary[n]['marker_y']
         width = dictionary[n]['width']
-        length = dictionary[n]['length']
+        height = dictionary[n]['length']
         im = dictionary[n]['imread']
         
         try:
@@ -371,9 +373,9 @@ for n_num in tqdm(range(len(keylist))):
         int_value = []
         # positive crop
         for i in range(len(marker_x)):
-            crop = find_square(y=marker_y[i], x=marker_x[i], unit=size_hf, im=im, length=length, width=width)
+            crop = find_square(y=marker_y[i], x=marker_x[i], unit=size_hf, im=im, height=height, width=width)
             
-            crop = crop / np.mean(crop)
+            # crop = crop / np.mean(crop)
             X.append(crop)
             Y.append([0,1])
             Z.append([n, marker_y[i], marker_x[i]])
@@ -406,8 +408,8 @@ for n_num in tqdm(range(len(keylist))):
                     passsw = False; break
             if not(passsw): continue
 
-            pc = find_square(y=A, x=B, unit=size_hf, im=im, length=length, width=width)
-            pc = pc / np.mean(pc)
+            pc = find_square(y=A, x=B, unit=size_hf, im=im, height=height, width=width)
+            # pc = pc / np.mean(pc)
             neg_int = im_mean(pc)
             
             # condition 2
@@ -424,7 +426,7 @@ for n_num in tqdm(range(len(keylist))):
 
 #%% cvset
 X = np.array(X); Y = np.array(Y); Z = np.array(Z)
-print(X.shape, len(X), 'np.sum(Y, axis=0)', np.sum(Y, axis=0))
+print(X.shape, len(X), 'np.mean(Y, axis=0)', np.mean(Y, axis=0))
 rlist = list(range(len(X)))
 random.seed(1)
 random.shuffle(rlist)
@@ -446,13 +448,14 @@ for se in range(len(session_list)):
 
 print('len(cvlist)', len(cvlist))
 
+import sys; sys.exit()
 #%% cv training
 cv = 0; mssave2 = []
 for cv in range(len(cvlist)):
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave =  'C:\\SynologyDrive\\study\\dy\\48\\' + weight_savename
     
-    if not(os.path.isfile(final_weightsave)) or True:
+    if not(os.path.isfile(final_weightsave)) or False:
         telist = cvlist[cv][0]
         trlist = list(set(tlist)-set(telist))
         
@@ -462,25 +465,25 @@ for cv in range(len(cvlist)):
         print(len(X_tr), len(X_te))
         print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
         
-        X_aug, Y_aug, Z_aug = [], [], []
-        for i in tqdm(range(len(X_tr))):
-            xout, yout, zout = im_aug(X_tr[i], Y_tr[i], Z_tr[i])
-            X_aug += list(xout)
-            Y_aug += list(yout)
-            Z_aug += list(zout)
-        X_aug, Y_aug, Z_aug = np.array(X_aug), np.array(Y_aug), np.array(Z_aug)
+        # X_aug, Y_aug, Z_aug = [], [], []
+        # for i in tqdm(range(len(X_tr))):
+        #     xout, yout, zout = im_aug(X_tr[i], Y_tr[i], Z_tr[i])
+        #     X_aug += list(xout)
+        #     Y_aug += list(yout)
+        #     Z_aug += list(zout)
+        # X_aug, Y_aug, Z_aug = np.array(X_aug), np.array(Y_aug), np.array(Z_aug)
             
-        X_tr = np.concatenate((X_tr, X_aug), axis=0)
-        Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
-        Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
+        # X_tr = np.concatenate((X_tr, X_aug), axis=0)
+        # Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
+        # Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
         
         print(X_tr.shape)
         print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
 #%%
         model = model_setup(xs=X_tr[0].shape, ys=Y_tr[0].shape[0])
-        model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
+        model.fit(X_tr, Y_tr, epochs=10, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
         model.save_weights(final_weightsave)
-        
+
     #%% test all set
     
     model.load_weights(final_weightsave)
@@ -508,32 +511,61 @@ for cv in range(len(cvlist)):
         polygon = dictionary2[test_image_no]['polygon']
         points = dictionary2[test_image_no]['points']
         
-        # note, 133 없음?
+    if False:
+        xtmp = []
+        vix = np.where(Y_te[:,1]==1)[0]
+        for j in vix:
+            y = Z_te[j,1]; x = Z_te[j,2]
+            unit=sh; im=t_im; height=height; width=width
+            crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+            # print(y, x)
+            # plt.imshow(crop)
+            # plt.plot(np.mean(crop, axis=0))
+            # np.mean(crop)
+            xtmp.append(crop)
+        xtmp = np.array(xtmp)
+        ytmp = model.predict(xtmp)
+        print(np.mean(ytmp[:,1]))
+            
+    try: del X_tr, X_te
+    except: pass
 
-    X_total_te, Z_total_te = [], []
-    for row in tqdm(range(sh, t_im.shape[0]-sh)):
-        for col in range(sh, t_im.shape[1]-sh):
-            crop = find_square(y=row, x=col, unit=sh, im=t_im, length=length, width=width)
-            if crop.shape ==  (29, 29, 3):
+    allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
+    yhat_save = []
+    z_save = []
+    for row in tqdm(range(0, t_im.shape[0])):
+        X_total_te = []
+        Z_total_te = []
+        for col in range(0, t_im.shape[1]):
+            y=row; x=col; unit=sh; im=t_im; height=height; width=width
+            crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+            if crop.shape == (29, 29, 3):
+                
                 # note, 크기가 안맞는 경우가 있음
-            
             # note, padding이 양쪽으로 되는거 같은데
-                X_total_te.append(crop)
-                Z_total_te.append([row, col])
-            
-    X_total_te = np.array(X_total_te)
-    Z_total_te = np.array(Z_total_te)
-    
-    yhat = model.predict(X_total_te)
-    
-    allo = np.zeros((t_im.shape[0], t_im.shape[1]))
-    for i in range(len(yhat)):
-        row = Z_total_te[i][0]
-        col = Z_total_te[i][1]
-        allo[row, col] = yhat[i,1]
+                # crop = crop / np.mean(crop)
+                if not(polygon is None):
+                    code = Point(col,row)
+                    if code.within(polygon):
+                        X_total_te.append(crop)
+                        Z_total_te.append([row, col])
+                else:
+                    X_total_te.append(crop)
+                    Z_total_te.append([row, col])
         
+        if len(X_total_te) > 0:
+            X_total_te = np.array(X_total_te)
+            yhat = model.predict(X_total_te)
+            for i in range(len(yhat)):
+                row = Z_total_te[i][0]
+                col = Z_total_te[i][1]
+                allo[row, col] = yhat[i,1]
+            yhat_save += list(yhat[:,1])
+            z_save += Z_total_te
+    z_save = np.array(z_save)
+  
     # if False:
-    #     plt.imshow(allo > 0.01)
+    #     plt.imshow(allo > 0.3)
     #     positive_pred = []
     #     for i in range(len(occupied)):
     #         positive_pred.append(allo[occupied[i,1], occupied[i,0]])
@@ -544,11 +576,11 @@ for cv in range(len(cvlist)):
     # threshold = 0.5
     # contour_thr = 40
     mssave = []
-    for threshold in tqdm(np.round(np.arange(0.1,0.8,0.01), 3)):
+    for threshold in tqdm(np.round(np.arange(0.1,0.9,0.01), 3)):
         for contour_thr in range(30,100,1):
             F1_score = get_F1(threshold=threshold, contour_thr=contour_thr,\
-                       height=height, width=width, yhat=yhat, \
-                           positive_indexs= positive_indexs, Z_total_te=Z_total_te, t_im=t_im, polygon=polygon)
+                       height=height, width=width, yhat_save=yhat_save, \
+                           positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
                 
             mssave.append([threshold, contour_thr, F1_score])
             # print([threshold, contour_thr, F1_score])
