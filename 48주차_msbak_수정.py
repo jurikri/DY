@@ -16,8 +16,8 @@ from shapely.geometry import Point, Polygon
 import cv2
 from PIL import Image,ImageFilter, ImageEnhance, ImageOps
 from tqdm import tqdm
-from PIL import Image,ImageEnhance  
-
+from PIL import Image,ImageEnhance
+import os
 #%% """HYPERPARAMETERS"""
 
 nct = 50 # INTENSITY 조정값
@@ -92,7 +92,7 @@ def im_mean(crop):
 
 def im_aug(crop, yin, zin):
     import numpy as np
-    from PIL import Image,ImageFilter, ImageEnhance, ImageOps
+    # from PIL import Image,ImageFilter, ImageEnhance, ImageOps
     
     new = Image.fromarray((crop).astype(np.uint8))
     
@@ -123,26 +123,191 @@ def im_aug(crop, yin, zin):
     
     return xout, yout, zout
 
+def get_F1(threshold=None, contour_thr=None,\
+           height=None, width=None, yhat=None, \
+               Z_total_te=None, t_im=None, positive_indexs=None, polygon=None):
+
+    import numpy as np
+    # import cv2
+    
+    noback_img = np.zeros((height, width, 3), np.uint8)
+    noback_img[:]= [255,255,0]
+    
+    vix = np.where(yhat[:,1] > threshold)[0]
+    for i in vix:
+        row = Z_total_te[i][0]
+        col = Z_total_te[i][1]
+        noback_img[row,col] = [0,0,255]
+
+    img_color = noback_img.copy()
+    img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
+    ret, img_binary = cv2.threshold(img_gray, 127, 255, 0)
+    contours, hierarchy = cv2.findContours(img_binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    pink = [] # predicted cell 중앙 좌표
+    los = [] # size filter 에서 살아남는 contours 
+    
+    for cnt in contours:
+        M = cv2.moments(cnt)
+        if M['m00'] < contour_thr: 
+            pass
+        elif M['m00'] > 500:
+            pass
+        else:
+            cx = int(M['m10']/M['m00'])
+            cy = int(M['m01']/M['m00'])
+            
+            # dict2 체크후 사용
+            if not(polygon is None):
+                code = Point(cx,cy)
+                if code.within(polygon)==True:
+                    pink.append((cx,cy))
+                    los.append(cnt)
+            else:
+                pink.append((cx,cy))
+                los.append(cnt)
+    
+    # predicted area 
+    white = np.zeros((height,width,3))*np.nan
+    white[:,:] = [255,255,255]
+    for lo in los: # los : size filter 에서 살아남는 contours 
+        cv2.drawContours(white, [lo], 0, (0, 0, 0), -2)  # black
+    
+    # plt.imshow(white)
+    
+    colored = [] # colored : predicted area 전체 표시 (작은 집단은 제외되어 있음)
+    w = np.where(white[:,:,0]==0)
+    for i in range(len(w[0])):
+        colored.append((w[1][i],w[0][i]))
+    
+    # answer (positive) area
+    co = []
+    for i in range(len(positive_indexs)):
+        row = positive_indexs[i][0]
+        col = positive_indexs[i][1]
+        if not(polygon is None):
+            code = Point(col, row)
+            if code.within(polygon):
+                co.append((int(col),int(row)))
+        else: co.append((int(col),int(row)))
+            
+        
+    original_img = np.array(t_im, dtype=np.uint8)
+    for nn in range(len(co)):
+        cv2.circle(original_img, co[nn], 3, (0,255,255), -1)  
+    
+    if False:
+        az = np.zeros((400*int(len(co)),2))*np.nan
+        for z in range(len(co)):
+            zx = co[z][0]
+            zy = co[z][1]
+            for zz in range(0,20):
+                az[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
+                az[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
+    
+        white2 = np.zeros((height,width,3))*np.nan
+        white2[:,:] = [255,255,255]
+        for i in range(len(az)):
+            white2[int(az[i][1]),int(az[i][0])] = [0,0,0]
+            
+    else:
+        white2 = np.zeros((height,width,3))*np.nan
+        white2[:,:] = [255,255,255]
+        boxsize = 10
+        for z in range(len(co)):
+            row = co[z][1]
+            col = co[z][0]
+            white2[np.max([row-boxsize, 0]) : np.min([row+boxsize, height]), np.max([col-boxsize, 0]) : np.min([col+boxsize, width])] = 0
+            
+    # plt.imshow(white2)    # ground truth area
+    tparea = []
+    w = np.where(white2[:,:,0]==0)
+    for i in range(len(w[0])):
+        tparea.append((w[1][i],w[0][i]))     
+
+    # predicted cells area
+    pur = np.zeros((400*int(len(pink)),2))*np.nan
+    for z in range(len(pink)):
+        zx = pink[z][0]
+        zy = pink[z][1]
+        for zz in range(0,20):
+            pur[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
+            pur[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
+
+    white4 = np.zeros((height,width,3))*np.nan
+    white4[:,:] = [255,255,255]
+    for i in range(len(pur)):
+        white4[int(int(pur[i][1])),int(pur[i][0])] = [0,0,0]
+        
+    # plt.imshow(white4)    # prediction area
+
+    # co = ground truth center point
+    # tparea = ground truth area
+    # pink = prediction area center point
+    # colored = prediction area total index
+
+    pink = list(set(pink) - set(tparea))
+    fn_list = list(set(co)-set(colored))
+    fn = len(fn_list)
+    
+    # for nn in range(len(pink)):
+    #     cv2.circle(original_img, pink[nn], 3, (255,0,255), -1) #################33
+    # for nn in range(len(fn_list)):
+    #     cv2.circle(original_img, fn_list[nn], 3, (0,255,20), -1)
+    # for aa in range(len(points)):
+    #     cv2.circle(original_img, points[aa],3,(0,0,0),-1) 
+    # pts = np.array([points],  np.int32)
+    # cv2.polylines(original_img, pts,True, (0,0,0), 1)
+    
+    ### detection save
+    # de_roi = cv2.polylines(img_color,pts,True,(0,0,0),1)
+    
+    tp_list = list(set(co)-set(fn_list))
+    tp = len(tp_list)
+    fp = len(pink)
+    # precision = tp/(tp+fp)
+    # recall = tp / (tp+fn)
+    # # score = 2*precision*recall / (precision+recall)
+    # TP = tp
+    # FP = fp
+    # FN = fn
+    
+    try:
+        precision = tp/(tp+fp)
+        recall = tp / (tp+fn)
+        F1_score = 2 * precision * recall / (precision + recall)
+    except: F1_score = 0
+    
+    return F1_score
+
 #%% keras setup
-def model_setup(xs=None, ys=None, lr=1e-6):
-    import tensorflow as tf
-    from tensorflow.keras import datasets, layers, models, regularizers
-    from tensorflow.keras.layers import BatchNormalization, Dropout
+def model_setup(xs=None, ys=None, lr=1e-4):
+    # import tensorflow as tf
+    # from tensorflow.keras import datasets, layers, models, regularizers
+    # from tensorflow.keras.layers import BatchNormalization, Dropout
     from tensorflow.keras.optimizers import Adam
     model = models.Sequential()
-    model.add(layers.Conv2D(2**6, (2, 2), activation='relu', input_shape=xs))
+    model.add(layers.Conv2D(2**12, (4, 4), activation='relu', input_shape=xs))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**6, (3, 3), activation='relu'))
+    model.add(layers.Conv2D(2**11, (3, 3), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**6, (2, 2), activation='relu'))
+    model.add(layers.Conv2D(2**10, (2, 2), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
+    
+    # model.add(layers.Conv2D(2**8, (5, 5), activation='relu'))
+    # model.add(layers.MaxPooling2D((2, 2)))
 
     model.add(layers.Flatten())
     model.add(layers.Dense(2**6, activation='relu' ))
+    model.add(layers.Dense(2**6, activation='relu' ))
+    model.add(layers.Dense(2**6, activation='relu' ))
+    model.add(layers.Dense(2**6, activation='relu' ))
+    model.add(layers.Dense(2**6, activation='relu' ))
+    model.add(layers.Dense(2**6, activation='relu' ))
     model.add(layers.Dense(2**6, activation='sigmoid') )
-    model.add(layers.Dense(ys, activation='softmax'))        
+    model.add(layers.Dense(ys, activation='softmax'))
 
     # model.compile(optimizer='adam',
     #               loss='categorical_crossentropy',
@@ -150,7 +315,7 @@ def model_setup(xs=None, ys=None, lr=1e-6):
 
     #               metrics=['accuracy'])
 
-    model.compile(optimizer=Adam(learning_rate=lr, decay=1e-6, beta_1=0.9, beta_2=0.999), \
+    model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
                   loss='categorical_crossentropy', metrics=['accuracy'])
     
     return model
@@ -168,6 +333,7 @@ with open(ms_filepath2, 'rb') as file:
     dictionary2 = pickle.load(file)
 
 keylist = list(dictionary.keys())
+keylist2 = list(dictionary2.keys())
     
 prev_len=0
 total_len = 0
@@ -185,11 +351,29 @@ for n_num in tqdm(range(len(keylist))):
         length = dictionary[n]['length']
         im = dictionary[n]['imread']
         
+        try:
+            polygon = dictionary2[n]['polygon']
+            points = dictionary2[n]['points']
+        except:
+            polygon = None
+            points = None
+        
+        if False:
+            im2 = np.array(im, dtype=np.uint8)
+            r = 10
+            for k in range(len(points)):
+                x = points[k][0]
+                y = points[k][1]
+                im2[y-r:y+r, x-r:x+r :] = 0       
+            plt.imshow(im2)
+        
+        
         int_value = []
         # positive crop
         for i in range(len(marker_x)):
             crop = find_square(y=marker_y[i], x=marker_x[i], unit=size_hf, im=im, length=length, width=width)
             
+            crop = crop / np.mean(crop)
             X.append(crop)
             Y.append([0,1])
             Z.append([n, marker_y[i], marker_x[i]])
@@ -204,20 +388,26 @@ for n_num in tqdm(range(len(keylist))):
         
         epochs = 10000000
         for epoch in range(epochs):
-            if negative_cnt > len(marker_x) * 3: break
+            if negative_cnt > len(marker_x) * 20: break
 
             A = random.randrange(min(marker_y)+1+size, max(marker_y)-1-size)
             B = random.randrange(min(marker_x)+1+size, max(marker_x)-1-size)
             
             passsw = True
             
+            # condition 0
+            if not polygon is None:
+                code = Point(B,A)
+                if not(code.within(polygon)): continue
+                
             # condition 1
             for yy in range(len(occupied)):
                 if (occupied[yy][0] - (2*sh)< A < occupied[yy][0] + (2*sh) ) and (occupied[yy][1] - (2*sh) < B < occupied[yy][0] + (2*sh)):
                     passsw = False; break
+            if not(passsw): continue
 
-            pc = find_square(y=A, x=B, \
-                             unit=size_hf, im=im, length=length, width=width)
+            pc = find_square(y=A, x=B, unit=size_hf, im=im, length=length, width=width)
+            pc = pc / np.mean(pc)
             neg_int = im_mean(pc)
             
             # condition 2
@@ -235,6 +425,12 @@ for n_num in tqdm(range(len(keylist))):
 #%% cvset
 X = np.array(X); Y = np.array(Y); Z = np.array(Z)
 print(X.shape, len(X), 'np.sum(Y, axis=0)', np.sum(Y, axis=0))
+rlist = list(range(len(X)))
+random.seed(1)
+random.shuffle(rlist)
+X = X[rlist]
+Y = Y[rlist]
+Z = Z[rlist]
 
 # LOSO cv
 tlist = list(range(len(X)))
@@ -245,52 +441,68 @@ session_list = list(set(np.array(Z[:,0])))
 for se in range(len(session_list)):
     msid = session_list[se]
     telist = np.where(np.array(Z[:,0])==msid)[0]
-    # print(se, msid, len(cvlist))     
+    print(se, msid, len(cvlist))     
     cvlist.append([telist, msid])
 
 print('len(cvlist)', len(cvlist))
 
 #%% cv training
-cv = 0
+cv = 0; mssave2 = []
 for cv in range(len(cvlist)):
-    telist = cvlist[cv][0]
-    trlist = list(set(tlist)-set(telist))
+    weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
+    final_weightsave =  'C:\\SynologyDrive\\study\\dy\\48\\' + weight_savename
     
-    X_tr = X[trlist]; Y_tr = Y[trlist]; Z_tr = Z[trlist]
-    X_te = X[telist]; Y_te = Y [telist]; Z_te = Z[telist]
-    
-    print(len(X_tr), len(X_te))
-    print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
-    
-    X_aug, Y_aug, Z_aug = [], [], []
-    for i in tqdm(range(len(X_tr))):
-        xout, yout, zout = im_aug(X_tr[i], Y_tr[i], Z_tr[i])
-        X_aug += list(xout)
-        Y_aug += list(yout)
-        Z_aug += list(zout)
-    X_aug, Y_aug, Z_aug = np.array(X_aug), np.array(Y_aug), np.array(Z_aug)
+    if not(os.path.isfile(final_weightsave)) or True:
+        telist = cvlist[cv][0]
+        trlist = list(set(tlist)-set(telist))
         
-    X_tr = np.concatenate((X_tr, X_aug), axis=0)
-    Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
-    Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
-    
-    print(X_tr.shape)
-    print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
-
-    #%%
-
-    model = model_setup(xs=X_tr[0].shape, ys=Y_tr[0].shape[0])
-    model.fit(X_tr, Y_tr, epochs=1000, verbose=1, validation_data=(X_te, Y_te))
-    
-
+        X_tr = X[trlist]; Y_tr = Y[trlist]; Z_tr = Z[trlist]
+        X_te = X[telist]; Y_te = Y[telist]; Z_te = Z[telist]
+        
+        print(len(X_tr), len(X_te))
+        print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
+        
+        X_aug, Y_aug, Z_aug = [], [], []
+        for i in tqdm(range(len(X_tr))):
+            xout, yout, zout = im_aug(X_tr[i], Y_tr[i], Z_tr[i])
+            X_aug += list(xout)
+            Y_aug += list(yout)
+            Z_aug += list(zout)
+        X_aug, Y_aug, Z_aug = np.array(X_aug), np.array(Y_aug), np.array(Z_aug)
+            
+        X_tr = np.concatenate((X_tr, X_aug), axis=0)
+        Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
+        Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
+        
+        print(X_tr.shape)
+        print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
+#%%
+        model = model_setup(xs=X_tr[0].shape, ys=Y_tr[0].shape[0])
+        model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
+        model.save_weights(final_weightsave)
+        
     #%% test all set
+    
+    model.load_weights(final_weightsave)
     test_image_no = cvlist[cv][1]
+    
     width = dictionary[test_image_no]['width']
     height = dictionary[test_image_no]['length']
     t_im = dictionary[test_image_no]['imread']
-    # marker_x = dictionary[test_image_no]['marker_x']
-    # marker_y = dictionary[test_image_no]['marker_y']
-    # occupied = np.transpose(np.array([marker_x, marker_y]))
+    marker_x = dictionary[test_image_no]['marker_x']
+    marker_y = dictionary[test_image_no]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    
+    try:
+        polygon = dictionary2[test_image_no]['polygon']
+        points = dictionary2[test_image_no]['points']
+    except:
+        polygon = None
+        points = None
+    
+    # M = []; up = 0; left = 0
+    # for i in range(len(marker_x)):
+    #     M.append((marker_y[i]-up, marker_x[i]-left))
     
     if False:
         polygon = dictionary2[test_image_no]['polygon']
@@ -302,11 +514,12 @@ for cv in range(len(cvlist)):
     for row in tqdm(range(sh, t_im.shape[0]-sh)):
         for col in range(sh, t_im.shape[1]-sh):
             crop = find_square(y=row, x=col, unit=sh, im=t_im, length=length, width=width)
+            if crop.shape ==  (29, 29, 3):
+                # note, 크기가 안맞는 경우가 있음
             
             # note, padding이 양쪽으로 되는거 같은데
-            
-            X_total_te.append(crop)
-            Z_total_te.append([row, col])
+                X_total_te.append(crop)
+                Z_total_te.append([row, col])
             
     X_total_te = np.array(X_total_te)
     Z_total_te = np.array(Z_total_te)
@@ -318,155 +531,32 @@ for cv in range(len(cvlist)):
         row = Z_total_te[i][0]
         col = Z_total_te[i][1]
         allo[row, col] = yhat[i,1]
-
+        
     # if False:
-    #     plt.imshow(allo > 0.9)
+    #     plt.imshow(allo > 0.01)
     #     positive_pred = []
     #     for i in range(len(occupied)):
     #         positive_pred.append(allo[occupied[i,1], occupied[i,0]])
     #     print('np.mean(positive_pred)', np.mean(positive_pred))
 
-    #%% >>> allo
+    #% >>> allo
     
-    threshold = 0.5
-    contour_thr = 40
-    
-    def get_F1(threshold=None, contour_thr=None,\
-               height=height, width=width, yhat=yhat, Z_total_te=Z_total_te, t_im=t_im):
-    
-        import numpy as np
-        import cv2
-        
-        noback_img = np.zeros((height, width, 3), np.uint8)
-        noback_img[:]= [255,255,0]
-        
-        vix = np.where(yhat[:,1] > threshold)[0]
-        for i in vix:
-            row = Z_total_te[i][0]
-            col = Z_total_te[i][1]
-            noback_img[row,col] = [0,0,255]
-        
-        
-        img_color = noback_img.copy()
-        img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
-        ret, img_binary = cv2.threshold(img_gray, 127, 255, 0)
-        contours, hierarchy = cv2.findContours(img_binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    
-        pink = [] # predicted cell 중앙 좌표
-        los = [] # size filter 에서 살아남는 contours 
-        
-        for cnt in contours:
-            M = cv2.moments(cnt)
-            if M['m00'] < contour_thr: 
-                pass
-            elif M['m00'] > 500:
-                pass
-            else:
-                cx = int(M['m10']/M['m00'])
-                cy = int(M['m01']/M['m00'])
-                
-                # dict2 체크후 사용
-                # code = Point(cx,cy)
-                # if code.within(polygon)==True:
-                pink.append((cx,cy))
-                los.append(cnt) 
-        
-        # predicted area 
-        white = np.zeros((height,width,3))*np.nan
-        white[:,:] = [255,255,255]
-        for lo in los:
-            cv2.drawContours(white, [lo], 0, (0, 0, 0), -2)  # black
-        
-        colored = []
-        w = np.where(white[:,:,0]==0)
-        for i in range(len(w[0])):
-            colored.append((w[1][i],w[0][i]))
-        
-        # answer (positive) area
-        co = []
-        for i in vix:
-            row = Z_total_te[i][0]
-            col = Z_total_te[i][1]
-            # code = Point(w,h)
-            # if code.within(polygon)==True:
-            co.append((int(col),int(row)))
-            
-        original_img = np.array(t_im, dtype=np.uint8)
-        for nn in range(len(co)):
-            cv2.circle(original_img, co[nn], 3, (0,255,255), -1)  
-            
-        az = np.zeros((400*int(len(co)),2))*np.nan
-        for z in range(len(co)):
-            zx = co[z][0]
-            zy = co[z][1]
-            for zz in range(0,20):
-                az[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
-                az[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
-    
-        white2 = np.zeros((height,width,3))*np.nan
-        white2[:,:] = [255,255,255]
-        for i in range(len(az)):
-            white2[int(az[i][1]),int(az[i][0])] = [0,0,0]
-        tparea = []
-        w = np.where(white2[:,:,0]==0)
-        for i in range(len(w[0])):
-            tparea.append((w[1][i],w[0][i]))     
-    
-        # predicted cells area
-        pur = np.zeros((400*int(len(pink)),2))*np.nan
-        for z in range(len(pink)):
-            zx = pink[z][0]
-            zy = pink[z][1]
-            for zz in range(0,20):
-                pur[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
-                pur[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
-    
-        white4 = np.zeros((height,width,3))*np.nan
-        white4[:,:] = [255,255,255]
-        for i in range(len(pur)):
-            white4[int(int(pur[i][1])),int(pur[i][0])] = [0,0,0]
-    
-        pink = list(set(pink) - set(tparea))
-        fn_list = list(set(co)-set(colored))
-        fn = len(fn_list)
-        
-        # for nn in range(len(pink)):
-        #     cv2.circle(original_img, pink[nn], 3, (255,0,255), -1) #################33
-        # for nn in range(len(fn_list)):
-        #     cv2.circle(original_img, fn_list[nn], 3, (0,255,20), -1)
-        # for aa in range(len(points)):
-        #     cv2.circle(original_img, points[aa],3,(0,0,0),-1) 
-        # pts = np.array([points],  np.int32)
-        # cv2.polylines(original_img, pts,True, (0,0,0), 1)
-        
-        ### detection save
-        # de_roi = cv2.polylines(img_color,pts,True,(0,0,0),1)
-        
-        tp_list = list(set(co)-set(fn_list))
-        tp = len(tp_list)
-        fp = len(pink)
-        # precision = tp/(tp+fp)
-        # recall = tp / (tp+fn)
-        # score = 2*precision*recall / (precision+recall)
-        TP = tp
-        FP = fp
-        FN = fn
-        precision = tp/(tp+fp)
-        recall = tp / (tp+fn)
-        F1_score = 2 * precision * recall / (precision + recall)
-        
-        return F1_score
-
+    # threshold = 0.5
+    # contour_thr = 40
     mssave = []
-    for threshold in [0.3, 0.4, 0.5, 0.6]:
-        for contour_thr in [10, 20, 40, 50]:
+    for threshold in tqdm(np.round(np.arange(0.1,0.8,0.01), 3)):
+        for contour_thr in range(30,100,1):
             F1_score = get_F1(threshold=threshold, contour_thr=contour_thr,\
-                       height=height, width=width, yhat=yhat, Z_total_te=Z_total_te, t_im=t_im)
+                       height=height, width=width, yhat=yhat, \
+                           positive_indexs= positive_indexs, Z_total_te=Z_total_te, t_im=t_im, polygon=polygon)
                 
             mssave.append([threshold, contour_thr, F1_score])
-            print([threshold, contour_thr, F1_score])
-
-
+            # print([threshold, contour_thr, F1_score])
+    mssave = np.array(mssave)
+    mix = np.argmax(mssave[:,2])
+    print()
+    print('max F1 score', [cv, test_image_no] + list(mssave[mix,:]))
+    mssave2.append([cv, test_image_no] + list(mssave[mix,:]))
 
 
 
