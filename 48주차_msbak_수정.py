@@ -366,11 +366,11 @@ def gen_total_index(height=None, width=None, polygon=None):
 # total_index_save = {'768_1254' : total_index}
 #%% XYZgen """train X, Y 만들기"""
 
-ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
+ms_filepath = mainpath + 'data_48.pickle'
 with open(ms_filepath, 'rb') as file:
     dictionary = pickle.load(file)
 
-ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
+ms_filepath2 = mainpath + 'roipoints_48.pickle'
 with open(ms_filepath2, 'rb') as file:
     dictionary2 = pickle.load(file)
 
