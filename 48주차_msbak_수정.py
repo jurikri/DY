@@ -140,6 +140,8 @@ def get_F1(threshold=None, contour_thr=None,\
         row = z_save[i][0]
         col = z_save[i][1]
         noback_img[row,col] = [0,0,255]
+        
+    plt.imshow(noback_img)
 
     img_color = noback_img.copy()
     img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
@@ -162,7 +164,7 @@ def get_F1(threshold=None, contour_thr=None,\
             # dict2 체크후 사용
             if not(polygon is None):
                 code = Point(cx,cy)
-                if code.within(polygon)==True:
+                if code.within(polygon):
                     pink.append((cx,cy))
                     los.append(cnt)
             else:
@@ -203,9 +205,9 @@ def get_F1(threshold=None, contour_thr=None,\
         white2 = np.zeros((height,width,3))*np.nan
         white2[:,:] = [255,255,255]
         boxsize = 10
-        for z in range(len(co)):
-            row = co[z][1]
-            col = co[z][0]
+        for z in range(len(dots)):
+            row = dots[z][1]
+            col = dots[z][0]
             white2[np.max([row-boxsize, 0]) : np.min([row+boxsize, height]), \
                    np.max([col-boxsize, 0]) : np.min([col+boxsize, width])] = 0
         return white2
@@ -330,7 +332,7 @@ def model_setup(xs=None, ys=None, lr=1e-4):
     #               metrics=['accuracy'])
 
     model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
-                  loss='categorical_crossentropy', metrics=['accuracy'])
+                  loss='categorical_crossentropy', metrics=['accuracy']) 
     
     return model
 
@@ -366,11 +368,11 @@ def gen_total_index(height=None, width=None, polygon=None):
 # total_index_save = {'768_1254' : total_index}
 #%% XYZgen """train X, Y 만들기"""
 
-ms_filepath = mainpath + 'data_48.pickle'
+ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
 with open(ms_filepath, 'rb') as file:
     dictionary = pickle.load(file)
 
-ms_filepath2 = mainpath + 'roipoints_48.pickle'
+ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
 with open(ms_filepath2, 'rb') as file:
     dictionary2 = pickle.load(file)
 
@@ -491,7 +493,7 @@ for n_num in tqdm(range(len(keylist))):
             
             # if epochs == epoch: print(n, 'ng shorts')
         
-        if False:
+        if True:
             positive = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,1]==1))[0]
             negative = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,0]==1))[0]
             
@@ -554,9 +556,9 @@ print('len(cvlist)', len(cvlist))
 
 import sys; sys.exit()
 #%% cv training
-cv = 3; mssave2 = []
+cv = 0; mssave2 = []
 print(cvlist[cv][1])
-for cv in range(3, len(cvlist)):
+for cv in range(0, len(cvlist)):
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave =  'C:\\SynologyDrive\\study\\dy\\48\\' + weight_savename
     
@@ -684,8 +686,8 @@ for cv in range(3, len(cvlist)):
     # optimize threshold, contour_thr
     
     mssave = []
-    for threshold in tqdm(np.round(np.arange(0.1,0.9,0.03), 3)):
-        for contour_thr in range(30,100,3):
+    for threshold in tqdm(np.round(np.arange(0.1,0.9,0.01), 3)):
+        for contour_thr in range(30,100,1):
             F1_score = get_F1(threshold=threshold, contour_thr=contour_thr,\
                        height=height, width=width, yhat_save=yhat_save, \
                            positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
@@ -698,14 +700,74 @@ for cv in range(3, len(cvlist)):
     print('max F1 score', [cv, test_image_no] + list(mssave[mix,:]))
     mssave2.append([cv, test_image_no] + list(mssave[mix,:]))
 
+print(len(mssave2))
+print(np.mean(np.array(mssave2)[:,-1]))
 
 
+#%%
+import pandas as pd
+import sys; 
+sys.path.append('D:\\mscore\\code_lab\\')
+sys.path.append('C:\\mscode')
+import msFunction
+
+df = np.array(pd.read_excel(mainpath + 'mouse_20220602.xlsx'))
+
+msGroup = {}
+for i in range(len(df)):
+    mskey = df[i,0]
+    mslabel = df[i,-1]
+    print(mskey, mslabel)
+    msGroup[mskey] = mslabel
+    
+mssave2 = np.array(mssave2)
 
 
+mssave3 = msFunction.msarray([2])
+for i in range(len(mssave2)):
+    if msGroup[mssave2[i,1]] == 'mptp':
+        mssave3[1].append([int(mssave2[i,1]), mssave2[i,4]])
+    elif  msGroup[mssave2[i,1]] == 'saline':
+        mssave3[0].append([int(mssave2[i,1]), mssave2[i,4]])
+        
+                           
+#%%
+mssave3 = msFunction.msarray([2])
+mssave4 = []
+for cv in range(0, len(cvlist)):
+    test_image_no = cvlist[cv][1]
+    image_no = test_image_no
+    marker_x = dictionary[test_image_no]['marker_x']
+    marker_y = dictionary[test_image_no]['marker_y']
+    
+    try:
+        polygon = dictionary2[test_image_no]['polygon']
+        points = dictionary2[test_image_no]['points']
+    except:
+        polygon = None
+        points = None
 
+    if not(polygon is None):
+        cell_in_roi = 0
+        for j in range(len(marker_x)): 
+            code = Point(marker_x[j], marker_y[j])
+            if code.within(polygon):
+                cell_in_roi += 1
+                
+        mslabel = None
+        if msGroup[image_no] == 'mptp':
+            mssave3[1].append([image_no, cell_in_roi])
+            mslabel = 'MPTP'
+        elif  msGroup[image_no] == 'saline':
+            mssave3[0].append([image_no, cell_in_roi])
+            mslabel = 'saline'
+            
+        mssave4.append([image_no, cell_in_roi, mslabel])
 
+Aprism = pd.DataFrame(np.array(mssave3[0])[:,-1])
+Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,-1])), axis=1, ignore_index=True)
 
-
+Aprism2 = pd.DataFrame(np.array(mssave4))
 
 
 
