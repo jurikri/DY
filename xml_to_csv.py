@@ -41,7 +41,7 @@ mssave = np.concatenate((np.zeros(mssave.shape), mssave), axis=1)
 mssave.shape
 msout = pd.DataFrame(mssave)
 
-msout.to_csv(mainpath + filename[:-3] + 'csv')
+msout.to_csv(mainpath + filename[:-3] + 'csv', index=False)
 
 
 
