@@ -141,7 +141,7 @@ def get_F1(threshold=None, contour_thr=None,\
         col = z_save[i][1]
         noback_img[row,col] = [0,0,255]
         
-    plt.imshow(noback_img)
+    # plt.imshow(noback_img)
 
     img_color = noback_img.copy()
     img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
@@ -294,7 +294,9 @@ def get_F1(threshold=None, contour_thr=None,\
         F1_score = 2 * precision * recall / (precision + recall)
     except: F1_score = 0
     
-    return F1_score
+    msdict = {'los': los, 'white': white}
+    
+    return F1_score, msdict
 
 #%% keras setup
 def model_setup(xs=None, ys=None, lr=1e-4):
@@ -688,7 +690,7 @@ for cv in range(0, len(cvlist)):
     mssave = []
     for threshold in tqdm(np.round(np.arange(0.1,0.9,0.01), 3)):
         for contour_thr in range(30,100,1):
-            F1_score = get_F1(threshold=threshold, contour_thr=contour_thr,\
+            F1_score, _ = get_F1(threshold=threshold, contour_thr=contour_thr,\
                        height=height, width=width, yhat_save=yhat_save, \
                            positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
 
@@ -703,8 +705,31 @@ for cv in range(0, len(cvlist)):
 print(len(mssave2))
 print(np.mean(np.array(mssave2)[:,-1]))
 
+#%% after optimization
 
-#%%
+psave = mainpath + 'thr_optimized_f1score.pickle'
+if not(os.path.isfile(psave)) or False:
+    with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
+        pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
+        print(psave, '저장되었습니다.')
+
+# optimized data load
+with open(psave, 'rb') as file:
+    mssave2 = pickle.load(file)
+mssave2 = np.array(mssave2)
+    # [cvnum, imgnum, threshold, contour_thr, optimized_F1score]
+
+ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
+with open(ms_filepath, 'rb') as file:
+    dictionary = pickle.load(file)
+
+ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
+with open(ms_filepath2, 'rb') as file:
+    dictionary2 = pickle.load(file)
+    
+keylist = list(dictionary.keys())
+keylist2 = list(dictionary2.keys())
+
 import pandas as pd
 import sys; 
 sys.path.append('D:\\mscore\\code_lab\\')
@@ -717,12 +742,65 @@ msGroup = {}
 for i in range(len(df)):
     mskey = df[i,0]
     mslabel = df[i,-1]
-    print(mskey, mslabel)
+    # print(mskey, mslabel)
     msGroup[mskey] = mslabel
-    
+
+#%% adhoc analysis
+
+mssave3 = msFunction.msarray([2])
+mssave4 = []
+for N in range(len(keylist)):
+    test_image_no = keylist[N]
+    if not test_image_no in [31, 'A3.1L']:
+        # load
+        psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
+        
+        width = dictionary[test_image_no]['width']
+        height = dictionary[test_image_no]['length']
+        t_im = dictionary[test_image_no]['imread']
+        marker_x = dictionary[test_image_no]['marker_x']
+        marker_y = dictionary[test_image_no]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        try:
+            polygon = dictionary2[test_image_no]['polygon']
+            points = dictionary2[test_image_no]['points']
+        except:
+            polygon = None
+            points = None
+            
+        if not(polygon is None):
+            with open(psave, 'rb') as file:
+                msdict = pickle.load(file)
+                yhat_save = msdict['yhat_save']
+                z_save = msdict['z_save']
+                   
+            # thr load
+            ix = np.where(mssave2[:,1] == test_image_no)[0][0]
+            threshold = mssave2[ix,2]
+            contour_thr = mssave2[ix,3]
+            
+            mssave4.append(mssave2[ix,4])
+            
+            F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+                       height=height, width=width, yhat_save=yhat_save, \
+                           positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+            
+            predicted_cell_n = len(msdict['los'])
+            
+            #
+            print(N, msGroup[test_image_no])
+            if msGroup[test_image_no] == 'mptp':
+                mssave3[1].append([test_image_no, predicted_cell_n])
+            elif  msGroup[test_image_no] == 'saline':
+                mssave3[0].append([test_image_no, predicted_cell_n])
+
+Aprism = pd.DataFrame(np.array(mssave3[0])[:,1])
+Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,1])), axis=1, ignore_index=True)    
+
+#%%
+
+
 mssave2 = np.array(mssave2)
-
-
 mssave3 = msFunction.msarray([2])
 for i in range(len(mssave2)):
     if msGroup[mssave2[i,1]] == 'mptp':
