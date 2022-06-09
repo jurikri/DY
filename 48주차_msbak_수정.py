@@ -372,15 +372,37 @@ def gen_total_index(height=None, width=None, polygon=None):
 
 ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
 with open(ms_filepath, 'rb') as file:
-    dictionary = pickle.load(file)
+    dictionary_old = pickle.load(file)
 
 ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
+with open(ms_filepath2, 'rb') as file:
+    dictionary2_old = pickle.load(file)
+
+ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_51.pickle'
+with open(ms_filepath, 'rb') as file:
+    dictionary = pickle.load(file)
+
+ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_51.pickle'
 with open(ms_filepath2, 'rb') as file:
     dictionary2 = pickle.load(file)
 
 keylist = list(dictionary.keys())
 keylist2 = list(dictionary2.keys())
+
+#%% key 매칭 old - new
+for n_num in range(len(keylist)):
+    n = keylist[n_num]
+    marker_x = dictionary[n]['marker_x']
     
+    for i in range(len(dictionary_old)):
+        oldkey = list(dictionary_old.keys())
+        marker_x_old = dictionary_old[oldkey[i]]['marker_x']
+        if len(marker_x_old) == len(marker_x):
+            if np.sum(np.abs(np.array(marker_x_old) - np.array(marker_x)))==0:
+                print(n_num, oldkey[i])
+                dictionary[n]['oldkey'] = oldkey[i]
+
+#%%
 prev_len=0
 total_len = 0
 
@@ -593,6 +615,8 @@ for cv in range(0, len(cvlist)):
         model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
         model.save_weights(final_weightsave)
 
+    #%%
+
     #% test all set
     test_image_no = cvlist[cv][1]
     psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
@@ -642,9 +666,7 @@ for cv in range(0, len(cvlist)):
                 y=row; x=col; unit=sh; im=t_im; height=height; width=width
                 crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
                 if crop.shape == (29, 29, 3):
-                    
-                    # note, 크기가 안맞는 경우가 있음
-                # note, padding이 양쪽으로 되는거 같은데
+
                     # crop = crop / np.mean(crop)
                     if not(polygon is None):
                         code = Point(col,row)
@@ -705,147 +727,206 @@ for cv in range(0, len(cvlist)):
 print(len(mssave2))
 print(np.mean(np.array(mssave2)[:,-1]))
 
+#%% 20220609 - ROI 모두 지정 후 재평가
+# XYZ 없이, oldkey만 가지고 test result 불러 온 뒤, "optimize threshold, contour_thr" 만 진행 
+
+mssave5 = []
+for n_num in range(len(keylist)):
+    n = keylist[n_num]
+    test_image_no = dictionary[n]['oldkey']
+    psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
+
+    with open(psave, 'rb') as file:
+        msdict = pickle.load(file)
+        yhat_save = msdict['yhat_save']
+        z_save = msdict['z_save']
+    
+    #
+    
+    width = dictionary[n]['width']
+    height = dictionary[n]['length']
+    t_im = dictionary[n]['imread']
+    marker_x = dictionary[n]['marker_x']
+    marker_y = dictionary[n]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    
+    polygon = dictionary2[n]['polygon']
+    
+    #
+    psave = mainpath + 'thr_optimized_f1score.pickle'
+    if not(os.path.isfile(psave)) or False:
+        with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
+            pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
+            print(psave, '저장되었습니다.')
+
+    # optimized data load
+    with open(psave, 'rb') as file:
+        mssave2 = pickle.load(file)
+    mssave2 = np.array(mssave2)
+    
+    #
+    
+    ix = np.where(mssave2[:,1] == test_image_no)[0][0]
+    threshold = mssave2[ix,2]
+    contour_thr = mssave2[ix,3]
+    
+    mssave = []
+    
+
+    F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+               height=height, width=width, yhat_save=yhat_save, \
+                   positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        
+    # print(n, mssave2[ix,4], '>>' , F1_score)
+    
+    predicted_cell_n = len(msdict['los'])
+    
+    #
+    print(n, predicted_cell_n)
+    mssave5.append([n, predicted_cell_n])
+ 
+
 #%% after optimization
 
-psave = mainpath + 'thr_optimized_f1score.pickle'
-if not(os.path.isfile(psave)) or False:
-    with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
-        pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
-        print(psave, '저장되었습니다.')
+# psave = mainpath + 'thr_optimized_f1score.pickle'
+# if not(os.path.isfile(psave)) or False:
+#     with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
+#         pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
+#         print(psave, '저장되었습니다.')
 
-# optimized data load
-with open(psave, 'rb') as file:
-    mssave2 = pickle.load(file)
-mssave2 = np.array(mssave2)
-    # [cvnum, imgnum, threshold, contour_thr, optimized_F1score]
+# # optimized data load
+# with open(psave, 'rb') as file:
+#     mssave2 = pickle.load(file)
+# mssave2 = np.array(mssave2)
+#     # [cvnum, imgnum, threshold, contour_thr, optimized_F1score]
 
-ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
-with open(ms_filepath, 'rb') as file:
-    dictionary = pickle.load(file)
+# # ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_51.pickle'
+# # with open(ms_filepath, 'rb') as file:
+# #     dictionary = pickle.load(file)
 
-ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
-with open(ms_filepath2, 'rb') as file:
-    dictionary2 = pickle.load(file)
+# # ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
+# # with open(ms_filepath2, 'rb') as file:
+# #     dictionary2 = pickle.load(file)
     
-keylist = list(dictionary.keys())
-keylist2 = list(dictionary2.keys())
+# # keylist = list(dictionary.keys())
+# # keylist2 = list(dictionary2.keys())
 
-import pandas as pd
-import sys; 
-sys.path.append('D:\\mscore\\code_lab\\')
-sys.path.append('C:\\mscode')
-import msFunction
+# import pandas as pd
+# import sys; 
+# sys.path.append('D:\\mscore\\code_lab\\')
+# sys.path.append('C:\\mscode')
+# import msFunction
 
-df = np.array(pd.read_excel(mainpath + 'mouse_20220602.xlsx'))
+# df = np.array(pd.read_excel(mainpath + 'mouse_20220602.xlsx'))
 
-msGroup = {}
-for i in range(len(df)):
-    mskey = df[i,0]
-    mslabel = df[i,-1]
-    # print(mskey, mslabel)
-    msGroup[mskey] = mslabel
+# msGroup = {}
+# for i in range(len(df)):
+#     mskey = df[i,0]
+#     mslabel = df[i,-1]
+#     # print(mskey, mslabel)
+#     msGroup[mskey] = mslabel
 
-#%% adhoc analysis
+# #%% adhoc analysis
 
-mssave3 = msFunction.msarray([2])
-mssave4 = []
-for N in range(len(keylist)):
-    test_image_no = keylist[N]
-    if not test_image_no in [31, 'A3.1L']:
-        # load
-        psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
+# mssave3 = msFunction.msarray([2])
+# mssave4 = []
+# for N in range(len(keylist)):
+#     test_image_no = keylist[N]
+#     if not test_image_no in [31, 'A3.1L']:
+#         # load
+#         psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
         
-        width = dictionary[test_image_no]['width']
-        height = dictionary[test_image_no]['length']
-        t_im = dictionary[test_image_no]['imread']
-        marker_x = dictionary[test_image_no]['marker_x']
-        marker_y = dictionary[test_image_no]['marker_y']
-        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-        try:
-            polygon = dictionary2[test_image_no]['polygon']
-            points = dictionary2[test_image_no]['points']
-        except:
-            polygon = None
-            points = None
+#         width = dictionary[test_image_no]['width']
+#         height = dictionary[test_image_no]['length']
+#         t_im = dictionary[test_image_no]['imread']
+#         marker_x = dictionary[test_image_no]['marker_x']
+#         marker_y = dictionary[test_image_no]['marker_y']
+#         positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+#         try:
+#             polygon = dictionary2[test_image_no]['polygon']
+#             points = dictionary2[test_image_no]['points']
+#         except:
+#             polygon = None
+#             points = None
             
-        if not(polygon is None):
-            with open(psave, 'rb') as file:
-                msdict = pickle.load(file)
-                yhat_save = msdict['yhat_save']
-                z_save = msdict['z_save']
+#         if not(polygon is None):
+#             with open(psave, 'rb') as file:
+#                 msdict = pickle.load(file)
+#                 yhat_save = msdict['yhat_save']
+#                 z_save = msdict['z_save']
                    
-            # thr load
-            ix = np.where(mssave2[:,1] == test_image_no)[0][0]
-            threshold = mssave2[ix,2]
-            contour_thr = mssave2[ix,3]
+#             # thr load
+#             ix = np.where(mssave2[:,1] == test_image_no)[0][0]
+#             threshold = mssave2[ix,2]
+#             contour_thr = mssave2[ix,3]
             
-            mssave4.append(mssave2[ix,4])
+#             mssave4.append(mssave2[ix,4])
             
-            F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
-                       height=height, width=width, yhat_save=yhat_save, \
-                           positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+#             F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+#                        height=height, width=width, yhat_save=yhat_save, \
+#                            positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
             
-            predicted_cell_n = len(msdict['los'])
+#             predicted_cell_n = len(msdict['los'])
             
-            #
-            print(N, msGroup[test_image_no])
-            if msGroup[test_image_no] == 'mptp':
-                mssave3[1].append([test_image_no, predicted_cell_n])
-            elif  msGroup[test_image_no] == 'saline':
-                mssave3[0].append([test_image_no, predicted_cell_n])
+#             #
+#             print(N, msGroup[test_image_no])
+#             if msGroup[test_image_no] == 'mptp':
+#                 mssave3[1].append([test_image_no, predicted_cell_n])
+#             elif  msGroup[test_image_no] == 'saline':
+#                 mssave3[0].append([test_image_no, predicted_cell_n])
 
-Aprism = pd.DataFrame(np.array(mssave3[0])[:,1])
-Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,1])), axis=1, ignore_index=True)    
+# Aprism = pd.DataFrame(np.array(mssave3[0])[:,1])
+# Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,1])), axis=1, ignore_index=True)    
 
-#%%
+# #%%
 
 
-mssave2 = np.array(mssave2)
-mssave3 = msFunction.msarray([2])
-for i in range(len(mssave2)):
-    if msGroup[mssave2[i,1]] == 'mptp':
-        mssave3[1].append([int(mssave2[i,1]), mssave2[i,4]])
-    elif  msGroup[mssave2[i,1]] == 'saline':
-        mssave3[0].append([int(mssave2[i,1]), mssave2[i,4]])
+# mssave2 = np.array(mssave2)
+# mssave3 = msFunction.msarray([2])
+# for i in range(len(mssave2)):
+#     if msGroup[mssave2[i,1]] == 'mptp':
+#         mssave3[1].append([int(mssave2[i,1]), mssave2[i,4]])
+#     elif  msGroup[mssave2[i,1]] == 'saline':
+#         mssave3[0].append([int(mssave2[i,1]), mssave2[i,4]])
         
                            
-#%%
-mssave3 = msFunction.msarray([2])
-mssave4 = []
-for cv in range(0, len(cvlist)):
-    test_image_no = cvlist[cv][1]
-    image_no = test_image_no
-    marker_x = dictionary[test_image_no]['marker_x']
-    marker_y = dictionary[test_image_no]['marker_y']
+# #%%
+# mssave3 = msFunction.msarray([2])
+# mssave4 = []
+# for cv in range(0, len(cvlist)):
+#     test_image_no = cvlist[cv][1]
+#     image_no = test_image_no
+#     marker_x = dictionary[test_image_no]['marker_x']
+#     marker_y = dictionary[test_image_no]['marker_y']
     
-    try:
-        polygon = dictionary2[test_image_no]['polygon']
-        points = dictionary2[test_image_no]['points']
-    except:
-        polygon = None
-        points = None
+#     try:
+#         polygon = dictionary2[test_image_no]['polygon']
+#         points = dictionary2[test_image_no]['points']
+#     except:
+#         polygon = None
+#         points = None
 
-    if not(polygon is None):
-        cell_in_roi = 0
-        for j in range(len(marker_x)): 
-            code = Point(marker_x[j], marker_y[j])
-            if code.within(polygon):
-                cell_in_roi += 1
+#     if not(polygon is None):
+#         cell_in_roi = 0
+#         for j in range(len(marker_x)): 
+#             code = Point(marker_x[j], marker_y[j])
+#             if code.within(polygon):
+#                 cell_in_roi += 1
                 
-        mslabel = None
-        if msGroup[image_no] == 'mptp':
-            mssave3[1].append([image_no, cell_in_roi])
-            mslabel = 'MPTP'
-        elif  msGroup[image_no] == 'saline':
-            mssave3[0].append([image_no, cell_in_roi])
-            mslabel = 'saline'
+#         mslabel = None
+#         if msGroup[image_no] == 'mptp':
+#             mssave3[1].append([image_no, cell_in_roi])
+#             mslabel = 'MPTP'
+#         elif  msGroup[image_no] == 'saline':
+#             mssave3[0].append([image_no, cell_in_roi])
+#             mslabel = 'saline'
             
-        mssave4.append([image_no, cell_in_roi, mslabel])
+#         mssave4.append([image_no, cell_in_roi, mslabel])
 
-Aprism = pd.DataFrame(np.array(mssave3[0])[:,-1])
-Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,-1])), axis=1, ignore_index=True)
+# Aprism = pd.DataFrame(np.array(mssave3[0])[:,-1])
+# Aprism = pd.concat((Aprism, pd.DataFrame(np.array(mssave3[1])[:,-1])), axis=1, ignore_index=True)
 
-Aprism2 = pd.DataFrame(np.array(mssave4))
+# Aprism2 = pd.DataFrame(np.array(mssave4))
 
 
 
