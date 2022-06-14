@@ -782,8 +782,8 @@ for n_num in range(len(keylist)):
     predicted_cell_n = len(msdict['los'])
     
     #
-    print(n, predicted_cell_n)
-    mssave5.append([n, predicted_cell_n])
+    print(n, predicted_cell_n, F1_score)
+    mssave5.append([n, predicted_cell_n, F1_score])
  
 
 #%% after optimization
