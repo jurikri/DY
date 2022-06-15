@@ -707,10 +707,16 @@ for se in range(len(session_list)):
 print('len(cvlist)', len(cvlist))
 
 import sys; sys.exit()
+#%%
+
+model = model_setup(xs=X[0].shape, ys=Y[0].shape[0])
+weight_savename = 'initial_weight.h5'
+initial_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
+model.save_weights(initial_weightsave)
 #%% cv training
 cv = 0; mssave2 = []
 print(cvlist[cv][1])
-for cv in range(0, len(cvlist)):
+for cv in range(len(cvlist)-1, -1, -1):
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
     
@@ -739,8 +745,8 @@ for cv in range(0, len(cvlist)):
         print(X_tr.shape)
         print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
 #%
-        model = model_setup(xs=X_tr[0].shape, ys=Y_tr[0].shape[0])
-        model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**3, validation_data=(X_te, Y_te))
+        model.load_weights(initial_weightsave)
+        model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
         model.save_weights(final_weightsave)
 
     #%%
