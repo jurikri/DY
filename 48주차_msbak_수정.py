@@ -791,45 +791,82 @@ for cv in range(0, len(cvlist)):
         print(np.mean(ytmp[:,1]>0.5))
 
     if not(os.path.isfile(psave)):
-        allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
+        import ray
+
+        
+        # allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
         yhat_save = []
         z_save = []
-        for row in tqdm(range(rowmin, rowmax)):
-            X_total_te = []
-            Z_total_te = []
-            for col in range(colmin, colmax):
-                y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                if crop.shape == (29, 29, 3):
-
-                    # crop = crop / np.mean(crop)
-                    if not(polygon is None):
-                        code = Point(col,row)
-                        if code.within(polygon):
-                            X_total_te.append(crop)
-                            Z_total_te.append([row, col])
-                    else:
-                        X_total_te.append(crop)
-                        Z_total_te.append([row, col])
-            
-            if len(X_total_te) > 0:
-                X_total_te = np.array(X_total_te)
-                yhat = model.predict(X_total_te)
-                for i in range(len(yhat)):
-                    row = Z_total_te[i][0]
-                    col = Z_total_te[i][1]
-                    allo[row, col] = yhat[i,1]
-                yhat_save += list(yhat[:,1])
-                z_save += Z_total_te
-        z_save = np.array(z_save)
-  
-        # if False:
-        #     plt.imshow(allo > 0.3)
-        #     positive_pred = []
-        #     for i in range(len(occupied)):
-        #         positive_pred.append(allo[occupied[i,1], occupied[i,0]])
-        #     print('np.mean(positive_pred)', np.mean(positive_pred))
+        
+        ##
+        import time
+        start = time.time()  # 시작 시간 저장
+        
+        cpus = 14
+        ray.shutdown()
+        ray.init(num_cpus=cpus)
+        @ray.remote
+        def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
+            X_total_te_tmp, Z_total_te_tmp = [] ,[]
+            for row in forlist_cpu:
+                for col in range(colmin, colmax):
+                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                    if crop.shape == (29, 29, 3):
     
+                        # crop = crop / np.mean(crop)
+                        if not(polygon is None):
+                            code = Point(col,row)
+                            if code.within(polygon):
+                                X_total_te_tmp.append(crop)
+                                Z_total_te_tmp.append([row, col])
+                        else:
+                            X_total_te_tmp.append(crop)
+                            Z_total_te_tmp.append([row, col])
+            return X_total_te_tmp, Z_total_te_tmp
+        
+        
+        forlist = list(range(rowmin, rowmax))
+        div = int(len(forlist)/cpus)
+        output_ids = []
+        for cpu in range(cpus):
+            print(cpu)
+            if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
+            elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
+
+            output_ids.append(test_crop.remote(forlist_cpu, height=height, width=width, sh=sh, t_im=t_im, polygon=polygon))
+        output_list = ray.get(output_ids)
+        
+        X_total_te = []
+        Z_total_te = []
+        for cpu in range(cpus):
+            X_total_te += output_list[cpu][0]
+            Z_total_te += output_list[cpu][1]
+            
+        print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
+        
+        ##
+        import time
+        start = time.time()  # 시작 시간 저장
+        
+        yhat_save = []
+        def ray_keras_predict(X_total_te):
+            X_total_te = np.array(X_total_te)
+            yhat = model.predict(X_total_te)
+            return list(yhat[:,1])
+        
+        forlist = list(X_total_te)
+        div = int(len(forlist)/cpus)
+        # output_ids = []
+        for cpu in range(cpus):
+            print(cpu)
+            if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
+            elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
+            yhat_save += (ray_keras_predict(forlist_cpu))
+            
+        print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
+        
+        z_save = list(Z_total_te)
         msdict = {'yhat_save': yhat_save, 'z_save': z_save}
         
         if not(os.path.isfile(psave)) or True:
@@ -843,16 +880,47 @@ for cv in range(0, len(cvlist)):
         z_save = msdict['z_save']
     
     # optimize threshold, contour_thr
+    import time
+    start = time.time()  # 시작 시간 저장
     
-    mssave = []
-    for threshold in tqdm(np.round(np.arange(0.1,0.9,0.05), 3)):
-        for contour_thr in range(30,100,3):
-            F1_score, _ = get_F1(threshold=threshold, contour_thr=contour_thr,\
-                       height=height, width=width, yhat_save=yhat_save, \
-                           positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+    cpus = 14
+    ray.shutdown()
+    ray.init(num_cpus=cpus)
+    
+    @ray.remote
+    def ray_F1score_cal(forlist_cpu, height=None, width=None, yhat_save=yhat_save, \
+                        positive_indexs=None, z_save=z_save, t_im=None, polygon=None):
+        
+        mssave = []
+        for threshold in forlist_cpu:
+            for contour_thr in range(30,100,3):
+                F1_score, _ = get_F1(threshold=threshold, contour_thr=contour_thr,\
+                            height=height, width=width, yhat_save=yhat_save, \
+                                positive_indexs=positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+    
+                # F1_score = 1
+    
+                mssave.append([threshold, contour_thr, F1_score])
+        return mssave
+    
+    tresholds_list = np.round(np.arange(0.1,0.9,0.01), 3)
+    forlist = list(tresholds_list)
+    div = int(len(forlist)/cpus)
+    output_ids = []
+    for cpu in range(cpus):
+        print(cpu)
+        if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
+        elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
 
-            mssave.append([threshold, contour_thr, F1_score])
-            print([threshold, contour_thr, F1_score])
+        output_ids.append(ray_F1score_cal.remote(forlist_cpu, height=height, width=width, \
+                                                  positive_indexs=positive_indexs, t_im=t_im, polygon=polygon))
+            
+    output_list = ray.get(output_ids)
+    mssave = []
+    for cpu in range(cpus):
+        mssave += output_list[cpu]
+    print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
+
     mssave = np.array(mssave)
     mix = np.argmax(mssave[:,2])
     print()
