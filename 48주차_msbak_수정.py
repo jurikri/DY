@@ -66,7 +66,7 @@ for (path, dir, files) in os.walk(path):
             print("%s/%s" % (path, filename))
             
             filepath = path + '//' + filename
-            msid = filename[10:-4]
+            msid = filename[10:-11]
             if not(msid in id_list[:,0]): print(filename, 'missing')
             ROI_list.append([msid, filepath])
 ROI_list = np.array(ROI_list)
@@ -77,17 +77,25 @@ dic = {}
 for i in tqdm(range(len(id_list))):
     msid = id_list[i][0]
     
+    # image
     idix = np.where(img_list[:,0] == msid)[0][0]
     im = img.imread(img_list[idix, 1])
     image = Image.open(img_list[idix, 1])
     width = image.size[0]
     length = image.size[1]
     
-    idix = np.where(marker_list[:,0] == msid)[0][0]
-    df = np.array(pd.read_csv(marker_list[idix, 1]))
-    marker_x = df[:,2]
-    marker_y = df[:,3]
+    # ROI
+    try:
+        idix = np.where(ROI_list[:,0] == msid)[0][0]
+        df = np.array(pd.read_csv(ROI_list[idix, 1]))
+        points = []
+        for j in range(len(df)):
+            points.append([int(df[j,0])*2, int(df[j,1])*2])
+        polygon = Polygon(points)
+    except:
+        print(msid)
     
+    # marker
     idix = np.where(marker_list[:,0] == msid)[0][0]
     df = np.array(pd.read_csv(marker_list[idix, 1]))
     marker_x = np.array(df[:,2], dtype=int)
@@ -97,7 +105,9 @@ for i in tqdm(range(len(id_list))):
               'marker_y':marker_y,
               'imread': im,
               'width': width,
-              'length': length}
+              'length': length,
+              'points': points,
+              'polygon': polygon}
     
     dic[msid] = r_dict
 
@@ -252,7 +262,7 @@ def get_F1(threshold=None, contour_thr=None,\
             cy = int(M['m01']/M['m00'])
             
             # dict2 체크후 사용
-            if not(polygon is None):
+            if not(polygon is None) and False:
                 code = Point(cx,cy)
                 if code.within(polygon):
                     pink.append((cx,cy))
@@ -395,13 +405,13 @@ def model_setup(xs=None, ys=None, lr=1e-4):
     # from tensorflow.keras.layers import BatchNormalization, Dropout
     from tensorflow.keras.optimizers import Adam
     model = models.Sequential()
-    model.add(layers.Conv2D(2**11, (4, 4), activation='relu', input_shape=xs))
+    model.add(layers.Conv2D(2**8, (4, 4), activation='relu', input_shape=xs))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**11, (3, 3), activation='relu'))
+    model.add(layers.Conv2D(2**8, (3, 3), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
     
-    model.add(layers.Conv2D(2**11, (2, 2), activation='relu'))
+    model.add(layers.Conv2D(2**8, (2, 2), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
     
     # model.add(layers.Conv2D(2**8, (5, 5), activation='relu'))
@@ -438,6 +448,13 @@ for row in range(-d,d):
         distance = np.sqrt(row**2 + col**2)
         if distance <= d:
             gap.append((row,col))
+            
+d = 100; gap2=[]
+for row in range(-d,d):
+    for col in range(-d,d):
+        distance = np.sqrt(row**2 + col**2)
+        if distance <= d:
+            gap2.append((row,col))
 
 def gen_total_index(height=None, width=None, polygon=None, retangle_roi_dict=None):
     from shapely.geometry import Point
@@ -508,17 +525,13 @@ with open(ms_filepath2, 'rb') as file:
 
 keylist = list(dictionary.keys())
 #%%
-prev_len=0
-total_len = 0
-
-
-psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms_XYZ.pickle'
-if not(os.path.isfile(psave)):
-
-    X, Y, Z = [], [], []
-    for n_num in tqdm(range(len(keylist))):
-        n = keylist[n_num]
+for n_num in tqdm(range(len(keylist))):
+    n = keylist[n_num]
+    psave = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save\\' +'data_52_ms_XYZ' + str(n) + '.pickle'
     
+    if not(os.path.isfile(psave)) or False:
+        X, Y, Z = [], [], []
+
         marker_x = dictionary[n]['marker_x']
         marker_y = dictionary[n]['marker_y']
         width = dictionary[n]['width']
@@ -579,8 +592,29 @@ if not(os.path.isfile(psave)):
                 col = positive_index[n1][1] + gap[n2][1]
                 gap_index.append((row,col))
                 
+        gap_index2_pre = []
+        for n1 in range(len(positive_index)):
+            for n2 in range(len(gap2)):
+                row = positive_index[n1][0] + gap2[n2][0]
+                col = positive_index[n1][1] + gap2[n2][1]
+                gap_index2_pre.append((row,col))
+                
+        eix0 = np.where(np.sum((np.array(gap_index2_pre) < 0), axis=1))[0]
+        eix1 = np.where(np.sum((np.array(gap_index2_pre)[:0] > height), axis=1))[0]
+        eix2 = np.where(np.sum((np.array(gap_index2_pre)[:1] > width), axis=1))[0]
+        eix = set(list(eix0) + list(eix1) + list(eix2))
+        tix = list(range(len(gap_index2_pre)))
+        tix = set(tix) - set(eix)
+        gap_index2 = []
+        for jj in tix:
+            gap_index2.append(gap_index2_pre[jj])
+        
+        
+                
         negative_index = list(set(total_index) - set(positive_index) - set(gap_index))
+        negative_index2 = list(set(gap_index2) - set(positive_index) - set(gap_index))
         negative_n = len(negative_index)
+        negative_n2 = len(negative_index2)
         
         # negative crop
         negative_cnt = 0
@@ -590,22 +624,40 @@ if not(os.path.isfile(psave)):
         
         epochs = 1000000000
         for epoch in range(epochs):
-            if negative_cnt > len(marker_x) * 20: break
+            if negative_cnt > len(marker_x) * 5: break
         
             rix = random.randint(0, negative_n-1)
             row = negative_index[rix][0]
             col = negative_index[rix][1]
     
             pc = find_square(y=row, x=col, unit=size_hf, im=im, height=height, width=width)
-            
-            neg_int = im_mean(pc)
-           
-            # condition 2
-            if neg_int < int_thr + nct:
-                 negative_cnt += 1
-                 X.append(pc)
-                 Y.append([1,0])
-                 Z.append([n, row, col])
+            if pc.shape == (29, 29, 3):
+                neg_int = im_mean(pc)
+               
+                # condition 2
+                if neg_int < int_thr + nct:
+                     negative_cnt += 1
+                     X.append(pc)
+                     Y.append([1,0])
+                     Z.append([n, row, col])
+                 
+        for epoch in range(epochs):
+            if negative_cnt > len(marker_x) * 50: break
+        
+            rix = random.randint(0, negative_n2-1)
+            row = negative_index2[rix][0]
+            col = negative_index2[rix][1]
+    
+            pc = find_square(y=row, x=col, unit=size_hf, im=im, height=height, width=width)
+            if pc.shape == (29, 29, 3):
+                neg_int = im_mean(pc)
+               
+                # condition 2
+                if neg_int < int_thr + nct:
+                     negative_cnt += 1
+                     X.append(pc)
+                     Y.append([1,0])
+                     Z.append([n, row, col])
         
         # roi 바깥쪽
         # negative_cnt = 0
@@ -650,45 +702,59 @@ if not(os.path.isfile(psave)):
             plt.imshow(allo, cmap='binary')
             plt.title(n)
             
-    print(X.shape, len(X), 'np.mean(Y, axis=0)', np.mean(Y, axis=0))
-    # balancing
-    plabel = np.where(Y[:,1]==1)[0]
-    X_tmp = X[plabel]
-    Y_tmp = Y[plabel]
-    Z_tmp = Z[plabel]
-    for repeat in range(4):
-        X_tmp = np.concatenate((X_tmp, X_tmp), axis=0)
-        Y_tmp = np.concatenate((Y_tmp, Y_tmp), axis=0)
-        Z_tmp = np.concatenate((Z_tmp, Z_tmp), axis=0)
-    
-    X = np.concatenate((X, X_tmp), axis=0)
-    Y = np.concatenate((Y, Y_tmp), axis=0)
-    Z = np.concatenate((Z, Z_tmp), axis=0)
-        
-    print(X.shape, len(X), 'np.mean(Y, axis=0)', np.mean(Y, axis=0))
-    
-    # shuffle
-    rlist = list(range(len(X)))
-    random.seed(1)
-    random.shuffle(rlist)
-    X = X[rlist]
-    Y = Y[rlist]
-    Z = Z[rlist]
-    
-    X = np.array(X); Y = np.array(Y); Z = np.array(Z)
-    msdict = {'X':X, 'Y':Y, 'Z':Z}
-    with open(psave, 'wb') as file:
-        pickle.dump(msdict, file)
-        print(psave, '저장되었습니다.')
-#%% cvset
+        msdict = {'X':X, 'Y':Y, 'Z':Z}
+        with open(psave, 'wb') as file:
+            pickle.dump(msdict, file)
+            print(psave, '저장되었습니다.')
+            
+#%% XYZ load
+X, Y, Z = [], [], []
+for n_num in tqdm(range(len(keylist))):
+    n = keylist[n_num]
+    psave = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save\\' +'data_52_ms_XYZ' + str(n) + '.pickle'
+    with open(psave, 'rb') as file:
+        msdict = pickle.load(file)
+        X_tmp = msdict['X']
+        Y_tmp = msdict['Y']
+        Z_tmp = msdict['Z']
 
-with open(psave, 'rb') as file:
-    msdict = pickle.load(file)
-    X = msdict['X']
-    Y = msdict['Y']
-    Z = msdict['Z']
+    X += X_tmp; Y += Y_tmp; Z += Z_tmp
     
-# print(Y[:10,0]   )
+Y = np.array(Y); Z = np.array(Z)    
+print(len(X), 'np.mean(Y, axis=0)', np.mean(Y, axis=0))
+    
+# balancing
+plabel = np.where(Y[:,1]==1)[0]
+X_tmp = []
+for i in plabel:
+    X_tmp.append(X[i])
+Y_tmp = Y[plabel]
+Z_tmp = Z[plabel]
+
+for repeat in range(5):
+    X_tmp += X_tmp
+    Y_tmp = np.concatenate((Y_tmp, Y_tmp), axis=0)
+    Z_tmp = np.concatenate((Z_tmp, Z_tmp), axis=0)
+
+X = X + X_tmp
+Y = np.concatenate((Y, Y_tmp), axis=0)
+Z = np.concatenate((Z, Z_tmp), axis=0)
+    
+print(len(X), 'np.mean(Y, axis=0)', np.mean(Y, axis=0))
+
+# shuffle
+rlist = list(range(len(X)))
+random.seed(1)
+random.shuffle(rlist)
+
+Xr = []
+for i in rlist:
+    Xr.append(X[i])
+X = list(Xr)
+Y = Y[rlist]
+Z = Z[rlist]
+
+#%% cvset
 
 # LOSO cv
 tlist = list(range(len(X)))
@@ -714,18 +780,55 @@ weight_savename = 'initial_weight.h5'
 initial_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
 model.save_weights(initial_weightsave)
 #%% cv training
+if False:
+    import ray
+    cpus = 7
+    ray.shutdown()
+    ray.init(num_cpus=cpus)
+    
+            
+    @ray.remote
+    def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
+        X_total_te_tmp, Z_total_te_tmp = [] ,[]
+        for row in forlist_cpu:
+            for col in range(colmin, colmax):
+                y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                if crop.shape == (29, 29, 3):
+
+                    # crop = crop / np.mean(crop)
+                    if not(polygon is None):
+                        code = Point(col,row)
+                        if code.within(polygon):
+                            X_total_te_tmp.append(crop)
+                            Z_total_te_tmp.append([row, col])
+                    else:
+                        X_total_te_tmp.append(crop)
+                        Z_total_te_tmp.append([row, col])
+        return X_total_te_tmp, Z_total_te_tmp
+
+#%%
+
 cv = 0; mssave2 = []
-print(cvlist[cv][1])
-for cv in range(len(cvlist)-1, -1, -1):
+# print(cvlist[cv][1])
+for cv in range(0, len(cvlist)):
+    print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
     
-    if not(os.path.isfile(final_weightsave)) or False:
+    if not(os.path.isfile(final_weightsave)) or True:
         telist = cvlist[cv][0]
         trlist = list(set(tlist)-set(telist))
         
-        X_tr = X[trlist]; Y_tr = Y[trlist]; Z_tr = Z[trlist]
-        X_te = X[telist]; Y_te = Y[telist]; Z_te = Z[telist]
+        X_tr = []
+        for k in trlist:
+            X_tr.append(X[k])
+        Y_tr = Y[trlist]; Z_tr = Z[trlist]
+
+        X_te = []
+        for k in telist:
+            X_te.append(X[k])
+        Y_te = Y[telist]; Z_te = Z[telist]
         
         print(len(X_tr), len(X_te))
         print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
@@ -742,19 +845,20 @@ for cv in range(len(cvlist)-1, -1, -1):
         # Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
         # Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
         
-        print(X_tr.shape)
+        # print(X_tr.shape)
         print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
 #%
+        X_tr = np.array(X_tr)
+        X_te = np.array(X_te)
         model.load_weights(initial_weightsave)
-        model.fit(X_tr, Y_tr, epochs=2, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
+        model.fit(X_tr, Y_tr, epochs=4, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
         model.save_weights(final_weightsave)
 
     #%%
 
     #% test all set
     test_image_no = cvlist[cv][1]
-    psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
-    model.load_weights(final_weightsave)
+    psave = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + 'sample_n_' + str(test_image_no) + '.pickle'
     
     width = dictionary[test_image_no]['width']
     height = dictionary[test_image_no]['length']
@@ -762,76 +866,34 @@ for cv in range(len(cvlist)-1, -1, -1):
     marker_x = dictionary[test_image_no]['marker_x']
     marker_y = dictionary[test_image_no]['marker_y']
     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    # try:
-    #     polygon = dictionary2[test_image_no]['polygon']
-    #     points = dictionary2[test_image_no]['points']
-    # except:
-    polygon = None
-    points = None
-        
-    # if False:
-    #     polygon = dictionary2[test_image_no]['polygon']
-    #     points = dictionary2[test_image_no]['points']
-    
-    # retangle ROI
-    rowmin = np.max([np.min(marker_y) - 50, 0])
-    rowmax = np.min([np.max(marker_y) + 50, height])
-    colmin = np.max([np.min(marker_x) - 50, 0])
-    colmax = np.min([np.max(marker_x) + 50, width])
-    retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
-        
-    if False:
-        xtmp = []
-        vix = np.where(Y_te[:,1]==1)[0]
-        for j in vix:
-            y = Z_te[j,1]; x = Z_te[j,2]
-            unit=sh; im=t_im; height=height; width=width
-            crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-            # print(y, x)
-            # plt.imshow(crop)
-            # plt.plot(np.mean(crop, axis=0))
-            # np.mean(crop)
-            xtmp.append(crop)
-        xtmp = np.array(xtmp)
-        ytmp = model.predict(xtmp)
-        print(np.mean(ytmp[:,1]>0.5))
+    polygon = dictionary[test_image_no]['polygon']
+    points = dictionary[test_image_no]['points']
 
     if not(os.path.isfile(psave)):
-        import ray
+    
+        model.load_weights(final_weightsave)
 
+        # if False:
+        #     polygon = dictionary2[test_image_no]['polygon']
+        #     points = dictionary2[test_image_no]['points']
         
-        # allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
-        yhat_save = []
-        z_save = []
-        
+        # retangle ROI
+        rowmin = np.max([np.min(marker_y) - 50, 0])
+        rowmax = np.min([np.max(marker_y) + 50, height])
+        colmin = np.max([np.min(marker_x) - 50, 0])
+        colmax = np.min([np.max(marker_x) + 50, width])
+        retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
+
         ##
+        # ray.shutdown()
+        # ray.init(num_cpus=cpus)
+        
+        try: del output_ids, output_list, X_total_te, Z_total_te
+        except:pass
+        
         import time
         start = time.time()  # 시작 시간 저장
-        
-        cpus = 14
-        ray.shutdown()
-        ray.init(num_cpus=cpus)
-        @ray.remote
-        def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
-            X_total_te_tmp, Z_total_te_tmp = [] ,[]
-            for row in forlist_cpu:
-                for col in range(colmin, colmax):
-                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                    if crop.shape == (29, 29, 3):
-    
-                        # crop = crop / np.mean(crop)
-                        if not(polygon is None):
-                            code = Point(col,row)
-                            if code.within(polygon):
-                                X_total_te_tmp.append(crop)
-                                Z_total_te_tmp.append([row, col])
-                        else:
-                            X_total_te_tmp.append(crop)
-                            Z_total_te_tmp.append([row, col])
-            return X_total_te_tmp, Z_total_te_tmp
-        
-        
+         
         forlist = list(range(rowmin, rowmax))
         div = int(len(forlist)/cpus)
         output_ids = []
@@ -842,6 +904,7 @@ for cv in range(len(cvlist)-1, -1, -1):
 
             output_ids.append(test_crop.remote(forlist_cpu, height=height, width=width, sh=sh, t_im=t_im, polygon=polygon))
         output_list = ray.get(output_ids)
+        print('step 2')
         
         X_total_te = []
         Z_total_te = []
@@ -880,18 +943,19 @@ for cv in range(len(cvlist)-1, -1, -1):
                 pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
                 print(psave, '저장되었습니다.')
 
+#%%
+
     with open(psave, 'rb') as file:
         msdict = pickle.load(file)
         yhat_save = msdict['yhat_save']
         z_save = msdict['z_save']
     
     # optimize threshold, contour_thr
-    import time
     start = time.time()  # 시작 시간 저장
     
-    cpus = 14
-    ray.shutdown()
-    ray.init(num_cpus=cpus)
+    # cpus = 6
+    # ray.shutdown()
+    # ray.init(num_cpus=cpus)
     
     @ray.remote
     def ray_F1score_cal(forlist_cpu, height=None, width=None, yhat_save=yhat_save, \
@@ -907,6 +971,7 @@ for cv in range(len(cvlist)-1, -1, -1):
                 # F1_score = 1
     
                 mssave.append([threshold, contour_thr, F1_score])
+                print([threshold, contour_thr, F1_score])
         return mssave
     
     tresholds_list = np.round(np.arange(0.1,0.9,0.01), 3)
@@ -925,7 +990,7 @@ for cv in range(len(cvlist)-1, -1, -1):
     mssave = []
     for cpu in range(cpus):
         mssave += output_list[cpu]
-    print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
+    # print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
 
     mssave = np.array(mssave)
     mix = np.argmax(mssave[:,2])
@@ -976,8 +1041,8 @@ for n_num in range(len(keylist)):
     #
     
     ix = np.where(mssave2[:,1] == test_image_no)[0][0]
-    threshold = mssave2[ix,2]
-    contour_thr = mssave2[ix,3]
+    threshold = 0.89
+    contour_thr = 99
     
     mssave = []
     
