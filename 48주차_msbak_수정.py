@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 """
 Created on Wed May 25 16:07:08 2022
 
@@ -6,6 +6,8 @@ Created on Wed May 25 16:07:08 2022
 """
 
 import tensorflow as tf
+# config = tf.compat.v1.ConfigProto()
+# config.gpu_options.allow_growth = True
 from tensorflow.keras import datasets, layers, models, regularizers
 from tensorflow.keras.layers import BatchNormalization, Dropout
 import matplotlib.pyplot as plt
@@ -399,6 +401,9 @@ def get_F1(threshold=None, contour_thr=None,\
     return F1_score, msdict
 
 #%% keras setup
+
+
+
 def model_setup(xs=None, ys=None, lr=1e-4):
     # import tensorflow as tf
     # from tensorflow.keras import datasets, layers, models, regularizers
@@ -624,7 +629,7 @@ for n_num in tqdm(range(len(keylist))):
         
         epochs = 1000000000
         for epoch in range(epochs):
-            if negative_cnt > len(marker_x) * 5: break
+            if negative_cnt > len(marker_x) * 1: break
         
             rix = random.randint(0, negative_n-1)
             row = negative_index[rix][0]
@@ -642,7 +647,7 @@ for n_num in tqdm(range(len(keylist))):
                      Z.append([n, row, col])
                  
         for epoch in range(epochs):
-            if negative_cnt > len(marker_x) * 50: break
+            if negative_cnt > len(marker_x) * 30: break
         
             rix = random.randint(0, negative_n2-1)
             row = negative_index2[rix][0]
@@ -731,7 +736,7 @@ for i in plabel:
 Y_tmp = Y[plabel]
 Z_tmp = Z[plabel]
 
-for repeat in range(5):
+for repeat in range(1):
     X_tmp += X_tmp
     Y_tmp = np.concatenate((Y_tmp, Y_tmp), axis=0)
     Z_tmp = np.concatenate((Z_tmp, Z_tmp), axis=0)
@@ -750,7 +755,7 @@ random.shuffle(rlist)
 Xr = []
 for i in rlist:
     Xr.append(X[i])
-X = list(Xr)
+X = np.array((Xr))
 Y = Y[rlist]
 Z = Z[rlist]
 
@@ -775,37 +780,6 @@ print('len(cvlist)', len(cvlist))
 import sys; sys.exit()
 #%%
 
-model = model_setup(xs=X[0].shape, ys=Y[0].shape[0])
-weight_savename = 'initial_weight.h5'
-initial_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
-model.save_weights(initial_weightsave)
-#%% cv training
-if False:
-    import ray
-    cpus = 7
-    ray.shutdown()
-    ray.init(num_cpus=cpus)
-    
-            
-    @ray.remote
-    def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
-        X_total_te_tmp, Z_total_te_tmp = [] ,[]
-        for row in forlist_cpu:
-            for col in range(colmin, colmax):
-                y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                if crop.shape == (29, 29, 3):
-
-                    # crop = crop / np.mean(crop)
-                    if not(polygon is None):
-                        code = Point(col,row)
-                        if code.within(polygon):
-                            X_total_te_tmp.append(crop)
-                            Z_total_te_tmp.append([row, col])
-                    else:
-                        X_total_te_tmp.append(crop)
-                        Z_total_te_tmp.append([row, col])
-        return X_total_te_tmp, Z_total_te_tmp
 
 #%%
 
@@ -816,45 +790,14 @@ for cv in range(0, len(cvlist)):
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
     
-    if not(os.path.isfile(final_weightsave)) or True:
+    if not(os.path.isfile(final_weightsave)) or False:
         telist = cvlist[cv][0]
         trlist = list(set(tlist)-set(telist))
-        
-        X_tr = []
-        for k in trlist:
-            X_tr.append(X[k])
-        Y_tr = Y[trlist]; Z_tr = Z[trlist]
-
-        X_te = []
-        for k in telist:
-            X_te.append(X[k])
-        Y_te = Y[telist]; Z_te = Z[telist]
-        
-        print(len(X_tr), len(X_te))
-        print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
-        
-        # X_aug, Y_aug, Z_aug = [], [], []
-        # for i in tqdm(range(len(X_tr))):
-        #     xout, yout, zout = im_aug(X_tr[i], Y_tr[i], Z_tr[i])
-        #     X_aug += list(xout)
-        #     Y_aug += list(yout)
-        #     Z_aug += list(zout)
-        # X_aug, Y_aug, Z_aug = np.array(X_aug), np.array(Y_aug), np.array(Z_aug)
-            
-        # X_tr = np.concatenate((X_tr, X_aug), axis=0)
-        # Y_tr = np.concatenate((Y_tr, Y_aug), axis=0)
-        # Z_tr = np.concatenate((Z_tr, Z_aug), axis=0)
-        
-        # print(X_tr.shape)
-        print(np.mean(Y_tr, axis=0), np.mean(Y_te, axis=0))
-#%
-        X_tr = np.array(X_tr)
-        X_te = np.array(X_te)
-        model.load_weights(initial_weightsave)
-        model.fit(X_tr, Y_tr, epochs=4, verbose=1, batch_size = 2**6, validation_data=(X_te, Y_te))
+        model = model_setup(xs=X[0].shape, ys=Y[0].shape[0])
+        model.fit(X[trlist], Y[trlist], epochs=4, verbose=1, batch_size = 2**2)
         model.save_weights(final_weightsave)
-
-    #%%
+        
+    # test (predict yhat)
 
     #% test all set
     test_image_no = cvlist[cv][1]
@@ -888,12 +831,32 @@ for cv in range(0, len(cvlist)):
         # ray.shutdown()
         # ray.init(num_cpus=cpus)
         
+        def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
+            X_total_te_tmp, Z_total_te_tmp = [] ,[]
+            for row in forlist_cpu:
+                for col in range(colmin, colmax):
+                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                    if crop.shape == (29, 29, 3):
+
+                        # crop = crop / np.mean(crop)
+                        if not(polygon is None):
+                            code = Point(col,row)
+                            if code.within(polygon):
+                                X_total_te_tmp.append(crop)
+                                Z_total_te_tmp.append([row, col])
+                        else:
+                            X_total_te_tmp.append(crop)
+                            Z_total_te_tmp.append([row, col])
+            return X_total_te_tmp, Z_total_te_tmp
+        
         try: del output_ids, output_list, X_total_te, Z_total_te
         except:pass
         
         import time
         start = time.time()  # 시작 시간 저장
-         
+        
+        cpus = 10
         forlist = list(range(rowmin, rowmax))
         div = int(len(forlist)/cpus)
         output_ids = []
@@ -902,9 +865,10 @@ for cv in range(0, len(cvlist)):
             if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
             elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
 
-            output_ids.append(test_crop.remote(forlist_cpu, height=height, width=width, sh=sh, t_im=t_im, polygon=polygon))
-        output_list = ray.get(output_ids)
-        print('step 2')
+            output_ids.append(test_crop(forlist_cpu, height=height, width=width, sh=sh, t_im=t_im, polygon=polygon))
+        # output_list = ray.get(output_ids)
+        output_list = list(output_ids)
+        # print('step 2')
         
         X_total_te = []
         Z_total_te = []
