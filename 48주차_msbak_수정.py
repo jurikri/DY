@@ -22,6 +22,7 @@ from tqdm import tqdm
 import os
 import matplotlib.image as img
 import pandas as pd
+import gc
 #%% rawdata_dict gen
 
 # img load, id list gen
@@ -396,7 +397,7 @@ def get_F1(threshold=None, contour_thr=None,\
         F1_score = 2 * precision * recall / (precision + recall)
     except: F1_score = 0
     
-    msdict = {'los': los, 'white': white}
+    msdict = {'los': los, 'co': co, 'truth_img': white2, 'predcit_img': white4, 'tp': tp, 'fp': fp, 'fn': fn}
     
     return F1_score, msdict
 
@@ -418,6 +419,12 @@ def model_setup(xs=None, ys=None, lr=1e-4):
     
     model.add(layers.Conv2D(2**8, (2, 2), activation='relu'))
     model.add(layers.MaxPooling2D((2, 2)))
+    
+    # model.add(layers.Conv2D(2**8, (3, 3), activation='relu'))
+    # model.add(layers.MaxPooling2D((2, 2)))
+    
+    # model.add(layers.Conv2D(2**8, (2, 2), activation='relu'))
+    # model.add(layers.MaxPooling2D((2, 2)))
     
     # model.add(layers.Conv2D(2**8, (5, 5), activation='relu'))
     # model.add(layers.MaxPooling2D((2, 2)))
@@ -712,6 +719,7 @@ for n_num in tqdm(range(len(keylist))):
             pickle.dump(msdict, file)
             print(psave, '저장되었습니다.')
             
+import sys; sys.exit()
 #%% XYZ load
 X, Y, Z = [], [], []
 for n_num in tqdm(range(len(keylist))):
@@ -783,25 +791,34 @@ import sys; sys.exit()
 
 #%%
 
+# from keras import backend as K
+# K.session_clear()
+
+weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
+
 cv = 0; mssave2 = []
 # print(cvlist[cv][1])
 for cv in range(0, len(cvlist)):
     print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
-    final_weightsave =  'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + weight_savename
+    final_weightsave = weight_savepath + weight_savename
     
     if not(os.path.isfile(final_weightsave)) or False:
+        print('cv tr start', cv)
         telist = cvlist[cv][0]
         trlist = list(set(tlist)-set(telist))
         model = model_setup(xs=X[0].shape, ys=Y[0].shape[0])
-        model.fit(X[trlist], Y[trlist], epochs=4, verbose=1, batch_size = 2**2)
+        model.fit(X[trlist], Y[trlist], epochs=4, verbose=1, batch_size = 2**4)
         model.save_weights(final_weightsave)
         
+        gc.collect()
+        tf.keras.backend.clear_session()
+        #
     # test (predict yhat)
 
     #% test all set
     test_image_no = cvlist[cv][1]
-    psave = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\' + 'sample_n_' + str(test_image_no) + '.pickle'
+    psave = weight_savepath + 'sample_n_' + str(test_image_no) + '.pickle'
     
     width = dictionary[test_image_no]['width']
     height = dictionary[test_image_no]['length']
@@ -813,157 +830,173 @@ for cv in range(0, len(cvlist)):
     points = dictionary[test_image_no]['points']
 
     if not(os.path.isfile(psave)):
-    
+        print('cv te start', cv)
         model.load_weights(final_weightsave)
-
-        # if False:
-        #     polygon = dictionary2[test_image_no]['polygon']
-        #     points = dictionary2[test_image_no]['points']
-        
-        # retangle ROI
         rowmin = np.max([np.min(marker_y) - 50, 0])
         rowmax = np.min([np.max(marker_y) + 50, height])
         colmin = np.max([np.min(marker_x) - 50, 0])
         colmax = np.min([np.max(marker_x) + 50, width])
         retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
 
-        ##
-        # ray.shutdown()
-        # ray.init(num_cpus=cpus)
-        
-        def test_crop(forlist_cpu, height=None, width=None, sh=None, t_im=None, polygon=None):
-            X_total_te_tmp, Z_total_te_tmp = [] ,[]
-            for row in forlist_cpu:
-                for col in range(colmin, colmax):
-                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                    if crop.shape == (29, 29, 3):
-
-                        # crop = crop / np.mean(crop)
-                        if not(polygon is None):
-                            code = Point(col,row)
-                            if code.within(polygon):
-                                X_total_te_tmp.append(crop)
-                                Z_total_te_tmp.append([row, col])
-                        else:
-                            X_total_te_tmp.append(crop)
-                            Z_total_te_tmp.append([row, col])
-            return X_total_te_tmp, Z_total_te_tmp
-        
-        try: del output_ids, output_list, X_total_te, Z_total_te
-        except:pass
-        
         import time
         start = time.time()  # 시작 시간 저장
-        
-        cpus = 10
-        forlist = list(range(rowmin, rowmax))
-        div = int(len(forlist)/cpus)
-        output_ids = []
-        for cpu in range(cpus):
-            print(cpu)
-            if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
-            elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
 
-            output_ids.append(test_crop(forlist_cpu, height=height, width=width, sh=sh, t_im=t_im, polygon=polygon))
-        # output_list = ray.get(output_ids)
-        output_list = list(output_ids)
-        # print('step 2')
-        
-        X_total_te = []
-        Z_total_te = []
-        for cpu in range(cpus):
-            X_total_te += output_list[cpu][0]
-            Z_total_te += output_list[cpu][1]
-            
-        print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
-        
-        ##
-        import time
-        start = time.time()  # 시작 시간 저장
-        
         yhat_save = []
-        def ray_keras_predict(X_total_te):
-            X_total_te = np.array(X_total_te)
-            yhat = model.predict(X_total_te)
-            return list(yhat[:,1])
-        
-        forlist = list(X_total_te)
-        div = int(len(forlist)/cpus)
-        # output_ids = []
-        for cpu in range(cpus):
-            print(cpu)
-            if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
-            elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
-            yhat_save += (ray_keras_predict(forlist_cpu))
-            
+        z_save = []
+        for row in tqdm(range(rowmin, rowmax)):
+            X_total_te = []
+            Z_total_te = []
+            for col in range(colmin, colmax):
+                y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                if crop.shape == (29, 29, 3):
+
+                    # crop = crop / np.mean(crop)
+                    if not(polygon is None):
+                        code = Point(col,row)
+                        if code.within(polygon):
+                            X_total_te.append(crop)
+                            Z_total_te.append([row, col])
+                    else:
+                        X_total_te.append(crop)
+                        Z_total_te.append([row, col])
+                        
+            if len(X_total_te) > 0:
+                X_total_te = np.array(X_total_te)
+                yhat = model.predict(X_total_te, verbose=0)
+                for i in range(len(yhat)):
+                    row = Z_total_te[i][0]
+                    col = Z_total_te[i][1]
+                yhat_save += list(yhat[:,1])
+                z_save += Z_total_te
         print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
-        
-        z_save = list(Z_total_te)
+        z_save = np.array(z_save)
+
         msdict = {'yhat_save': yhat_save, 'z_save': z_save}
         
         if not(os.path.isfile(psave)) or True:
             with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
                 pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
                 print(psave, '저장되었습니다.')
+            gc.collect()
+            tf.keras.backend.clear_session()
+#%
+    psave2 = weight_savepath + 'F1_parameters_' + str(test_image_no) + '.pickle'
+    if not(os.path.isfile(psave2)):
+        print('cv F1calc start', cv)
+        with open(psave, 'rb') as file:
+            msdict = pickle.load(file)
+            yhat_save = msdict['yhat_save']
+            z_save = msdict['z_save']
+        
+        # optimize threshold, contour_thr
+        start = time.time()  # 시작 시간 저장
+        import ray
+        cpus = 6
+        ray.shutdown()
+        ray.init(num_cpus=cpus)
+        
+        @ray.remote
+        def ray_F1score_cal(forlist_cpu, height=None, width=None, yhat_save=yhat_save, \
+                            positive_indexs=None, z_save=z_save, t_im=None, polygon=None):
+            
+            mssave = []
+            for threshold in forlist_cpu:
+                for contour_thr in range(30,100,3):
+                    F1_score, _ = get_F1(threshold=threshold, contour_thr=contour_thr,\
+                                height=height, width=width, yhat_save=yhat_save, \
+                                    positive_indexs=positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        
+                    # F1_score = 1
+                    mssave.append([threshold, contour_thr, F1_score])
+                    # print([threshold, contour_thr, F1_score])
+            return mssave
+        
+        tresholds_list = np.round(np.arange(0.1,0.9,0.01), 3)
+        forlist = list(tresholds_list)
+        div = int(len(forlist)/cpus)
+        output_ids = []
+        for cpu in range(cpus):
+            print('ray', cpu)
+            if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
+            elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
+    
+            output_ids.append(ray_F1score_cal.remote(forlist_cpu, height=height, width=width, \
+                                                      positive_indexs=positive_indexs, t_im=t_im, polygon=polygon))
+                
+        output_list = ray.get(output_ids)
+        mssave = []
+        for cpu in range(cpus):
+            mssave += output_list[cpu]
+        # print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
+        
+        mssave = np.array(mssave)
+        mix = np.argmax(mssave[:,2])
+        print()
+        result = [cv, test_image_no] + list(mssave[mix,:])
+        print('max F1 score', result)
+        
+        
+        if not(os.path.isfile(psave2)) or True:
+            with open(psave2, 'wb') as f:  # Python 3: open(..., 'rb')
+                pickle.dump(result, f, pickle.HIGHEST_PROTOCOL)
+                print(psave2, '저장되었습니다.')
+            gc.collect()
+            tf.keras.backend.clear_session()
+    # mssave2.append([cv, test_image_no] + list(mssave[mix,:]))
 
-#%%
-
+#%% to excel
+mssave2 = []
+for i in tqdm(range(len(id_list))):
+    msid = id_list[i][0]
+    idnum = int(id_list[i][1])
+    
+    # yhat_save, z_save
+    psave = weight_savepath + 'sample_n_' + msid + '.pickle'
     with open(psave, 'rb') as file:
         msdict = pickle.load(file)
         yhat_save = msdict['yhat_save']
         z_save = msdict['z_save']
     
-    # optimize threshold, contour_thr
-    start = time.time()  # 시작 시간 저장
-    
-    # cpus = 6
-    # ray.shutdown()
-    # ray.init(num_cpus=cpus)
-    
-    @ray.remote
-    def ray_F1score_cal(forlist_cpu, height=None, width=None, yhat_save=yhat_save, \
-                        positive_indexs=None, z_save=z_save, t_im=None, polygon=None):
+    # threshold, contour_thr
+    psave2 = weight_savepath + 'F1_parameters_' + msid + '.pickle'
+    with open(psave2, 'rb') as file:
+        result = pickle.load(file)
         
-        mssave = []
-        for threshold in forlist_cpu:
-            for contour_thr in range(30,100,3):
-                F1_score, _ = get_F1(threshold=threshold, contour_thr=contour_thr,\
-                            height=height, width=width, yhat_save=yhat_save, \
-                                positive_indexs=positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        
+    threshold = result[2]
+    contour_thr = result[3]
+    width = dictionary[msid]['width']
+    height = dictionary[msid]['length']
+    t_im = dictionary[msid]['imread']
+    marker_x = dictionary[msid]['marker_x']
+    marker_y = dictionary[msid]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[msid]['polygon']
     
-                # F1_score = 1
+    F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+               height=height, width=width, yhat_save=yhat_save, \
+                   positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
     
-                mssave.append([threshold, contour_thr, F1_score])
-                print([threshold, contour_thr, F1_score])
-        return mssave
+    predicted_cell_n = len(msdict['los'])
     
-    tresholds_list = np.round(np.arange(0.1,0.9,0.01), 3)
-    forlist = list(tresholds_list)
-    div = int(len(forlist)/cpus)
-    output_ids = []
-    for cpu in range(cpus):
-        print(cpu)
-        if cpu != cpus-1: forlist_cpu = forlist[cpu*div : (cpu+1)*div]
-        elif cpu == cpus-1: forlist_cpu = forlist[cpu*div :]
+    tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
+    mssave2.append(tmp)
+    
+    if False:
+        plt.figure()
+        plt.subplot(2, 1, 1)
+        plt.title(msid + ' _truth_img')
+        plt.imshow(msdict['truth_img'])
+        plt.subplot(2, 1, 2)
+        plt.title('predcit_img')
+        plt.imshow(msdict['predcit_img'])
+        plt.tight_layout()
+        figsave_path = 'C:\\SynologyDrive\\study\\dy\\52\\figsave\\' + msid + '.png'
+        plt.savefig(figsave_path, dpi=200)
+    
+mssave2 = np.array(mssave2)
 
-        output_ids.append(ray_F1score_cal.remote(forlist_cpu, height=height, width=width, \
-                                                  positive_indexs=positive_indexs, t_im=t_im, polygon=polygon))
-            
-    output_list = ray.get(output_ids)
-    mssave = []
-    for cpu in range(cpus):
-        mssave += output_list[cpu]
-    # print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
-
-    mssave = np.array(mssave)
-    mix = np.argmax(mssave[:,2])
-    print()
-    print('max F1 score', [cv, test_image_no] + list(mssave[mix,:]))
-    mssave2.append([cv, test_image_no] + list(mssave[mix,:]))
-
-print(len(mssave2))
-print(np.mean(np.array(mssave2)[:,-1]))
 
 #%% 20220609 - ROI 모두 지정 후 재평가
 # XYZ 없이, oldkey만 가지고 test result 불러 온 뒤, "optimize threshold, contour_thr" 만 진행 
@@ -988,7 +1021,7 @@ for n_num in range(len(keylist)):
     marker_y = dictionary[n]['marker_y']
     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
     
-    polygon = dictionary2[n]['polygon']
+    # polygon = dictionary2[n]['polygon']
     
     #
     psave = mainpath + 'thr_optimized_f1score.pickle'
