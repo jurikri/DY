@@ -80,6 +80,9 @@ dic = {}
 for i in tqdm(range(len(id_list))):
     msid = id_list[i][0]
     
+    # if msid == 's210331_3L':
+    #     import sys;sys.exit()
+    
     # image
     idix = np.where(img_list[:,0] == msid)[0][0]
     im = img.imread(img_list[idix, 1])
@@ -118,8 +121,6 @@ psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
 with open(psave, 'wb') as file:
     pickle.dump(dic, file)
     print(psave, '저장되었습니다.')
-
-
 
 #%% """HYPERPARAMETERS"""
 mainpath = 'C:\\SynologyDrive\\study\\dy\\48\\'
@@ -256,23 +257,15 @@ def get_F1(threshold=None, contour_thr=None,\
     
     for cnt in contours:
         M = cv2.moments(cnt)
-        if M['m00'] < contour_thr: 
-            pass
-        elif M['m00'] > 500:
-            pass
-        else:
+        if M['m00'] >= contour_thr and  M['m00'] <= 500: 
             cx = int(M['m10']/M['m00'])
             cy = int(M['m01']/M['m00'])
             
-            # dict2 체크후 사용
-            if not(polygon is None) and False:
-                code = Point(cx,cy)
-                if code.within(polygon):
-                    pink.append((cx,cy))
-                    los.append(cnt)
-            else:
+            code = Point(cx,cy)
+            if code.within(polygon):
                 pink.append((cx,cy))
                 los.append(cnt)
+
     
     # predicted area 
     white = np.zeros((height,width,3))*np.nan
@@ -292,11 +285,11 @@ def get_F1(threshold=None, contour_thr=None,\
     for i in range(len(positive_indexs)):
         row = positive_indexs[i][0]
         col = positive_indexs[i][1]
-        if not(polygon is None):
-            code = Point(col, row)
-            if code.within(polygon):
-                co.append((int(col),int(row)))
-        else: co.append((int(col),int(row)))
+
+        code = Point(col, row)
+        if code.within(polygon):
+            co.append((int(col),int(row)))
+
             
         
     original_img = np.array(t_im, dtype=np.uint8)
@@ -315,25 +308,8 @@ def get_F1(threshold=None, contour_thr=None,\
                    np.max([col-boxsize, 0]) : np.min([col+boxsize, width])] = 0
         return white2
                 
-    
-    if False:
-        az = np.zeros((400*int(len(co)),2))*np.nan
-        for z in range(len(co)):
-            zx = co[z][0]
-            zy = co[z][1]
-            for zz in range(0,20):
-                az[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
-                az[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
-    
-        white2 = np.zeros((height,width,3))*np.nan
-        white2[:,:] = [255,255,255]
-        for i in range(len(az)):
-            white2[int(az[i][1]),int(az[i][0])] = [0,0,0]
-            
-    else:
-        dots = co
-        white2 = dot_expand(height=height, width=width, dots=dots)
-            
+    dots = co
+    white2 = dot_expand(height=height, width=width, dots=dots)
     # plt.imshow(white2)    # ground truth area
     tparea = []
     w = np.where(white2[:,:,0]==0)
@@ -341,22 +317,8 @@ def get_F1(threshold=None, contour_thr=None,\
         tparea.append((w[1][i],w[0][i]))     
 
     # predicted cells area
-    if False:
-        pur = np.zeros((400*int(len(pink)),2))*np.nan
-        for z in range(len(pink)):
-            zx = pink[z][0]
-            zy = pink[z][1]
-            for zz in range(0,20):
-                pur[z*400+(20*zz):z*400+zz*20+20,0] = list(range(zx-10,zx+10))
-                pur[z*400+zz*20:z*400+zz*20+20,1] = list(range(zy-10,zy+10))[zz]
-    
-        white4 = np.zeros((height,width,3))*np.nan
-        white4[:,:] = [255,255,255]
-        for i in range(len(pur)):
-            white4[int(int(pur[i][1])),int(pur[i][0])] = [0,0,0]
-    else:
-        dots = pink
-        white4 = dot_expand(height=height, width=width, dots=dots)
+    dots = pink
+    white4 = dot_expand(height=height, width=width, dots=dots)
         
     # plt.imshow(white4)    # prediction area
 
@@ -383,7 +345,10 @@ def get_F1(threshold=None, contour_thr=None,\
     
     tp_list = list(set(co)-set(fn_list))
     tp = len(tp_list)
-    fp = len(pink)
+    fp = len(los) - tp
+    
+    
+    
     # precision = tp/(tp+fp)
     # recall = tp / (tp+fn)
     # # score = 2*precision*recall / (precision+recall)
@@ -397,7 +362,7 @@ def get_F1(threshold=None, contour_thr=None,\
         F1_score = 2 * precision * recall / (precision + recall)
     except: F1_score = 0
     
-    msdict = {'los': los, 'co': co, 'truth_img': white2, 'predcit_img': white4, 'tp': tp, 'fp': fp, 'fn': fn}
+    msdict = {'los': los, 'co': co, 'truth_img': white2, 'predcit_img': white, 'tp': tp, 'fp': fp, 'fn': fn}
     
     return F1_score, msdict
 
@@ -536,7 +501,28 @@ with open(ms_filepath2, 'rb') as file:
     dictionary = pickle.load(file)
 
 keylist = list(dictionary.keys())
+
 #%%
+#%% ROI check
+
+for i in range(len(keylist)):
+    test_image_no = keylist[i]
+    t_im = dictionary[test_image_no]['imread']
+    marker_x = dictionary[test_image_no]['marker_x']
+    marker_y = dictionary[test_image_no]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[test_image_no]['polygon']
+    points = dictionary[test_image_no]['points']
+
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    plt.figure()
+    plt.imshow(tmp)
+    plt.title(str(i) +'_'+ test_image_no)
+
+
+
+#%% XYZ gen
 for n_num in tqdm(range(len(keylist))):
     n = keylist[n_num]
     psave = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save\\' +'data_52_ms_XYZ' + str(n) + '.pickle'
@@ -786,19 +772,22 @@ for se in range(len(session_list)):
 print('len(cvlist)', len(cvlist))
 
 import sys; sys.exit()
-#%%
-
 
 #%%
-
-# from keras import backend as K
-# K.session_clear()
 
 weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
 
 cv = 0; mssave2 = []
 # print(cvlist[cv][1])
+
+# save step
+# 1. weight
+# 2. test data
+# 3. F1 score optimization
+
 for cv in range(0, len(cvlist)):
+    
+    # 1. weight
     print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
     final_weightsave = weight_savepath + weight_savename
@@ -813,13 +802,10 @@ for cv in range(0, len(cvlist)):
         
         gc.collect()
         tf.keras.backend.clear_session()
-        #
-    # test (predict yhat)
 
-    #% test all set
+    # common load
     test_image_no = cvlist[cv][1]
     psave = weight_savepath + 'sample_n_' + str(test_image_no) + '.pickle'
-    
     width = dictionary[test_image_no]['width']
     height = dictionary[test_image_no]['length']
     t_im = dictionary[test_image_no]['imread']
@@ -829,8 +815,9 @@ for cv in range(0, len(cvlist)):
     polygon = dictionary[test_image_no]['polygon']
     points = dictionary[test_image_no]['points']
 
+    # 2. test data
     if not(os.path.isfile(psave)):
-        print('cv te start', cv)
+        print('prep test data', cv)
         model.load_weights(final_weightsave)
         rowmin = np.max([np.min(marker_y) - 50, 0])
         rowmax = np.min([np.max(marker_y) + 50, height])
@@ -838,51 +825,68 @@ for cv in range(0, len(cvlist)):
         colmax = np.min([np.max(marker_x) + 50, width])
         retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
 
-        import time
-        start = time.time()  # 시작 시간 저장
-
-        yhat_save = []
+        import time; start = time.time()  # 시작 시간 저장
+        
         z_save = []
         for row in tqdm(range(rowmin, rowmax)):
-            X_total_te = []
-            Z_total_te = []
             for col in range(colmin, colmax):
-                y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                if crop.shape == (29, 29, 3):
-
-                    # crop = crop / np.mean(crop)
-                    if not(polygon is None):
+                z_save.append([row,col])
+        z_save = np.array(z_save)
+        
+        import ray
+        cpus = 8
+        ray.shutdown()
+        ray.init(num_cpus=cpus)
+        
+        
+        from shapely.geometry import Point
+        @ray.remote
+        def ray_prep_testdata(raylist=None, colmin=None, sh=None, t_im=None, colmax=None, height=None, width=None):
+            X_total_te = []
+            for row in raylist:
+                for col in range(colmin, colmax):
+                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                    if crop.shape == (29, 29, 3):
                         code = Point(col,row)
                         if code.within(polygon):
                             X_total_te.append(crop)
-                            Z_total_te.append([row, col])
-                    else:
-                        X_total_te.append(crop)
-                        Z_total_te.append([row, col])
-                        
-            if len(X_total_te) > 0:
-                X_total_te = np.array(X_total_te)
-                yhat = model.predict(X_total_te, verbose=0)
-                for i in range(len(yhat)):
-                    row = Z_total_te[i][0]
-                    col = Z_total_te[i][1]
-                yhat_save += list(yhat[:,1])
-                z_save += Z_total_te
-        print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
-        z_save = np.array(z_save)
-
-        msdict = {'yhat_save': yhat_save, 'z_save': z_save}
+            return X_total_te
         
+        # ray-format
+        forlist = list(range(rowmin, rowmax))
+        div = int(len(forlist)/cpus)
+        output_ids = []
+        for cpu in range(cpus):
+            print('ray', cpu)
+            if cpu != cpus-1: raylist = forlist[cpu*div : (cpu+1)*div]
+            elif cpu == cpus-1: raylist = forlist[cpu*div :]
+            
+            output_ids.append(ray_prep_testdata.remote \
+                              (raylist=raylist, colmin=colmin, sh=sh, \
+                               t_im=t_im, colmax=colmax, height=height, \
+                                   width=width))
+                
+        output_list = ray.get(output_ids)
+        
+        yhat_save = []
+        for ray_i in range(len(output_list)):
+            tmp = np.array(output_list[ray_i])
+            print(ray_i, tmp.shape)
+            yhat_save += list(model.predict(tmp, verbose=1)[:,1])
+            
+        msdict = {'yhat_save': yhat_save, 'z_save': z_save}
         if not(os.path.isfile(psave)) or True:
             with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
                 pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
                 print(psave, '저장되었습니다.')
-            gc.collect()
-            tf.keras.backend.clear_session()
-#%
+                
+        gc.collect()
+        t1 = time.time() - start; print('\n', "time :", t1)  # 현재시각 - 시작시간 = 실행 시간
+    
+    # 3. F1 score optimization
     psave2 = weight_savepath + 'F1_parameters_' + str(test_image_no) + '.pickle'
-    if not(os.path.isfile(psave2)):
+    if not(os.path.isfile(psave2)) or False:
         print('cv F1calc start', cv)
         with open(psave, 'rb') as file:
             msdict = pickle.load(file)
@@ -890,9 +894,9 @@ for cv in range(0, len(cvlist)):
             z_save = msdict['z_save']
         
         # optimize threshold, contour_thr
-        start = time.time()  # 시작 시간 저장
+        import time; start = time.time()  # 시작 시간 저장
         import ray
-        cpus = 6
+        cpus = 8
         ray.shutdown()
         ray.init(num_cpus=cpus)
         
@@ -932,24 +936,22 @@ for cv in range(0, len(cvlist)):
         
         mssave = np.array(mssave)
         mix = np.argmax(mssave[:,2])
-        print()
         result = [cv, test_image_no] + list(mssave[mix,:])
-        print('max F1 score', result)
-        
+        print('\n', 'max F1 score', result)
         
         if not(os.path.isfile(psave2)) or True:
             with open(psave2, 'wb') as f:  # Python 3: open(..., 'rb')
                 pickle.dump(result, f, pickle.HIGHEST_PROTOCOL)
                 print(psave2, '저장되었습니다.')
-            gc.collect()
-            tf.keras.backend.clear_session()
-    # mssave2.append([cv, test_image_no] + list(mssave[mix,:]))
+        gc.collect()
+        t1 = time.time() - start; print('\n', "time F1 optimize :", t1)  # 현재시각 - 시작시간 = 실행 시간
+
 
 #%% to excel
 mssave2 = []
 for i in tqdm(range(len(id_list))):
     msid = id_list[i][0]
-    idnum = int(id_list[i][1])
+    idnum = int(id_list[i][1]) #  's210331_3L'
     
     # yhat_save, z_save
     psave = weight_savepath + 'sample_n_' + msid + '.pickle'
@@ -963,7 +965,6 @@ for i in tqdm(range(len(id_list))):
     with open(psave2, 'rb') as file:
         result = pickle.load(file)
         
-        
     threshold = result[2]
     contour_thr = result[3]
     width = dictionary[msid]['width']
@@ -973,17 +974,29 @@ for i in tqdm(range(len(id_list))):
     marker_y = dictionary[msid]['marker_y']
     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
     polygon = dictionary[msid]['polygon']
+    points = dictionary[msid]['points']
+    
+    #%
+    plt.imshow(t_im)
+    
+    t_im2 = Image.fromarray((t_im).astype(np.uint8))
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    plt.imshow(tmp)
+    #%
     
     F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
                height=height, width=width, yhat_save=yhat_save, \
                    positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        
+    
     
     predicted_cell_n = len(msdict['los'])
     
     tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
     mssave2.append(tmp)
     
-    if False:
+    if True:
         plt.figure()
         plt.subplot(2, 1, 1)
         plt.title(msid + ' _truth_img')
@@ -994,6 +1007,7 @@ for i in tqdm(range(len(id_list))):
         plt.tight_layout()
         figsave_path = 'C:\\SynologyDrive\\study\\dy\\52\\figsave\\' + msid + '.png'
         plt.savefig(figsave_path, dpi=200)
+        plt.close()
     
 mssave2 = np.array(mssave2)
 
