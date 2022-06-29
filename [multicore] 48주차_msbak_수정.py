@@ -80,6 +80,9 @@ dic = {}
 for i in tqdm(range(len(id_list))):
     msid = id_list[i][0]
     
+    # if msid == 's210331_3L':
+    #     import sys;sys.exit()
+    
     # image
     idix = np.where(img_list[:,0] == msid)[0][0]
     im = img.imread(img_list[idix, 1])
@@ -88,16 +91,13 @@ for i in tqdm(range(len(id_list))):
     length = image.size[1]
     
     # ROI
-    try:
-        idix = np.where(ROI_list[:,0] == msid)[0][0]
-        df = np.array(pd.read_csv(ROI_list[idix, 1]))
-        points = []
-        for j in range(len(df)):
-            points.append([int(df[j,0])*2, int(df[j,1])*2])
-        polygon = Polygon(points)
-    except:
-        print(msid)
-    
+    idix = np.where(ROI_list[:,0] == msid)[0][0]
+    df = np.array(pd.read_csv(ROI_list[idix, 1]))
+    points = []
+    for j in range(len(df)):
+        points.append([int(df[j,0])*2, int(df[j,1])*2])
+    polygon = Polygon(points)
+
     # marker
     idix = np.where(marker_list[:,0] == msid)[0][0]
     df = np.array(pd.read_csv(marker_list[idix, 1]))
@@ -118,8 +118,6 @@ psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
 with open(psave, 'wb') as file:
     pickle.dump(dic, file)
     print(psave, '저장되었습니다.')
-
-
 
 #%% """HYPERPARAMETERS"""
 mainpath = 'C:\\SynologyDrive\\study\\dy\\48\\'
@@ -367,8 +365,6 @@ def get_F1(threshold=None, contour_thr=None,\
 
 #%% keras setup
 
-
-
 def model_setup(xs=None, ys=None, lr=1e-4):
     # import tensorflow as tf
     # from tensorflow.keras import datasets, layers, models, regularizers
@@ -454,56 +450,41 @@ def gen_total_index(height=None, width=None, polygon=None, retangle_roi_dict=Non
                 
     return total_index
 
-# total_index = gen_total_index(height=768, width=1254, polygon=None)
-# total_index_save = {'768_1254' : total_index}
-#%% XYZgen """train X, Y 만들기"""
 
-# ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
-# with open(ms_filepath, 'rb') as file:
-#     dictionary_old = pickle.load(file)
-
-# ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
-# with open(ms_filepath2, 'rb') as file:
-#     dictionary2_old = pickle.load(file)
-
-# ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_51.pickle'
-# with open(ms_filepath, 'rb') as file:
-#     dictionary = pickle.load(file)
-
-# ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_51.pickle'
-# with open(ms_filepath2, 'rb') as file:
-#     dictionary2 = pickle.load(file)
-
-# keylist = list(dictionary.keys())
-# keylist2 = list(dictionary2.keys())
-
-# #%% key 매칭 old - new
-# for n_num in range(len(keylist)):
-#     n = keylist[n_num]
-#     marker_x = dictionary[n]['marker_x']
-    
-#     for i in range(len(dictionary_old)):
-#         oldkey = list(dictionary_old.keys())
-#         marker_x_old = dictionary_old[oldkey[i]]['marker_x']
-#         if len(marker_x_old) == len(marker_x):
-#             if np.sum(np.abs(np.array(marker_x_old) - np.array(marker_x)))==0:
-#                 print(n_num, oldkey[i])
-#                 dictionary[n]['oldkey'] = oldkey[i]
-
-# psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
-# with open(psave, 'wb') as file:
-#     pickle.dump(dic, file)
-#     print(psave, '저장되었습니다.')
     
 ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
 with open(ms_filepath2, 'rb') as file:
     dictionary = pickle.load(file)
 
 keylist = list(dictionary.keys())
+
+#%% ROI check
+
+if False:
+    for i in range(len(keylist)):
+        test_image_no = keylist[i]
+        t_im = dictionary[test_image_no]['imread']
+        marker_x = dictionary[test_image_no]['marker_x']
+        marker_y = dictionary[test_image_no]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[test_image_no]['polygon']
+        points = dictionary[test_image_no]['points']
+    
+        pts = np.array([points],  np.int32)
+        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+        plt.figure()
+        plt.imshow(tmp)
+        plt.title(str(i) +'_'+ test_image_no)
+
+
+
 #%% XYZ gen
+
+mainpath = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save3\\'
+
 for n_num in tqdm(range(len(keylist))):
     n = keylist[n_num]
-    psave = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save\\' +'data_52_ms_XYZ' + str(n) + '.pickle'
+    psave = mainpath +'data_52_ms_XYZ' + str(n) + '.pickle'
     
     if not(os.path.isfile(psave)) or False:
         X, Y, Z = [], [], []
@@ -635,30 +616,6 @@ for n_num in tqdm(range(len(keylist))):
                      Y.append([1,0])
                      Z.append([n, row, col])
         
-        # roi 바깥쪽
-        # negative_cnt = 0
-        # for epoch in range(epochs):
-        #     if negative_cnt > len(marker_x) * 2: break
-    
-        #     row = random.randint(rowmin, rowmax)
-        #     col = random.randint(colmin, colmax)
-            
-        #     if not (row,col) in gap_index:
-        #         passsw = False
-        #         if not polygon is None:
-        #             code = Point(col,row)
-        #             if not(code.within(polygon)): passsw = True
-        #         else: passsw = True
-        #         if passsw:
-        #             pc = find_square(y=row, x=col, unit=size_hf, im=im, height=height, width=width)
-        
-        #             negative_cnt += 1
-        #             X.append(pc)
-        #             Y.append([1,0])
-        #             Z.append([n, row, col])
-            
-            # if epochs == epoch: print(n, 'ng shorts')
-        
         if True:
             positive = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,1]==1))[0]
             negative = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,0]==1))[0]
@@ -684,11 +641,72 @@ for n_num in tqdm(range(len(keylist))):
             print(psave, '저장되었습니다.')
             
 import sys; sys.exit()
+
+#%% ROI check
+
+for i in range(len(keylist)):
+    test_image_no = keylist[i]
+    t_im = dictionary[test_image_no]['imread']
+    marker_x = dictionary[test_image_no]['marker_x']
+    marker_y = dictionary[test_image_no]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[test_image_no]['polygon']
+    points = dictionary[test_image_no]['points']
+
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    plt.figure()
+    plt.imshow(tmp)
+    plt.title(str(i) +'_'+ test_image_no)
+
+#%% marker check
+
+for i in tqdm(range(len(id_list))):
+    msid = id_list[i][0]
+    idnum = int(id_list[i][1]) #  's210331_3L'
+    
+    # yhat_save, z_save
+    # psave = weight_savepath + 'sample_n_' + msid + '.pickle'
+    # with open(psave, 'rb') as file:
+    #     msdict = pickle.load(file)
+    #     yhat_save = msdict['yhat_save']
+    #     z_save = msdict['z_save']
+    
+    # # threshold, contour_thr
+    # psave2 = weight_savepath + 'F1_parameters_' + msid + '.pickle'
+    # with open(psave2, 'rb') as file:
+    #     result = pickle.load(file)
+        
+    # threshold = result[2]
+    # contour_thr = result[3]
+    width = dictionary[msid]['width']
+    height = dictionary[msid]['length']
+    t_im = dictionary[msid]['imread']
+    marker_x = dictionary[msid]['marker_x']
+    marker_y = dictionary[msid]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[msid]['polygon']
+    points = dictionary[msid]['points']
+    
+    
+    #%
+    plt.imshow(t_im)
+    
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    for nn in range(len(positive_indexs)):
+        tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
+    plt.imshow(tmp)
+    plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
+                bbox_inches = 'tight', 
+                pad_inches = 0)
+
+
 #%% XYZ load
 X, Y, Z = [], [], []
 for n_num in tqdm(range(len(keylist))):
     n = keylist[n_num]
-    psave = 'C:\\SynologyDrive\\study\\dy\\52\\xyz_save\\' +'data_52_ms_XYZ' + str(n) + '.pickle'
+    psave = mainpath +'data_52_ms_XYZ' + str(n) + '.pickle'
     with open(psave, 'rb') as file:
         msdict = pickle.load(file)
         X_tmp = msdict['X']
@@ -753,7 +771,7 @@ import sys; sys.exit()
 
 #%%
 
-weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
+weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave3\\'
 
 cv = 0; mssave2 = []
 # print(cvlist[cv][1])
@@ -792,6 +810,18 @@ for cv in range(0, len(cvlist)):
     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
     polygon = dictionary[test_image_no]['polygon']
     points = dictionary[test_image_no]['points']
+    
+    tmp_list = [[],[]]
+    for k in range(len(marker_x)):
+        col = marker_x[k]
+        row = marker_y[k]
+        code = Point(col,row)
+        if code.within(polygon):
+            tmp_list[0].append(col)
+            tmp_list[1].append(row)
+            
+    marker_x = np.array(tmp_list[0])
+    marker_y = np.array(tmp_list[1])
 
     # 2. test data
     if not(os.path.isfile(psave)):
@@ -808,7 +838,9 @@ for cv in range(0, len(cvlist)):
         z_save = []
         for row in tqdm(range(rowmin, rowmax)):
             for col in range(colmin, colmax):
-                z_save.append([row,col])
+                code = Point(col,row)
+                if code.within(polygon):
+                    z_save.append([row,col])
         z_save = np.array(z_save)
         
         import ray
@@ -816,10 +848,10 @@ for cv in range(0, len(cvlist)):
         ray.shutdown()
         ray.init(num_cpus=cpus)
         
-        
         from shapely.geometry import Point
+        
         @ray.remote
-        def ray_prep_testdata(raylist=None, colmin=None, sh=None, t_im=None, colmax=None, height=None, width=None):
+        def ray_prep_testdata(raylist=None, colmin=None, sh=None, t_im=None, colmax=None, height=None, width=None, polygon=None):
             X_total_te = []
             for row in raylist:
                 for col in range(colmin, colmax):
@@ -829,10 +861,13 @@ for cv in range(0, len(cvlist)):
                         code = Point(col,row)
                         if code.within(polygon):
                             X_total_te.append(crop)
+                    else:
+                        print('ee')
             return X_total_te
         
         # ray-format
         forlist = list(range(rowmin, rowmax))
+        forlist2 = list(range(colmin, colmax))
         div = int(len(forlist)/cpus)
         output_ids = []
         for cpu in range(cpus):
@@ -840,10 +875,18 @@ for cv in range(0, len(cvlist)):
             if cpu != cpus-1: raylist = forlist[cpu*div : (cpu+1)*div]
             elif cpu == cpus-1: raylist = forlist[cpu*div :]
             
+            # print(len(raylist) * len(forlist2))
+            
             output_ids.append(ray_prep_testdata.remote \
                               (raylist=raylist, colmin=colmin, sh=sh, \
                                t_im=t_im, colmax=colmax, height=height, \
-                                   width=width))
+                                   width=width, polygon=polygon))
+                
+            # X_total_te = ray_prep_testdata(raylist=raylist, \
+            #                                 colmin=colmin, sh=sh, \
+            #                                     t_im=t_im, colmax=colmax, \
+            #                                         height=height, width=width, polygon=polygon)
+            
                 
         output_list = ray.get(output_ids)
         
@@ -852,6 +895,8 @@ for cv in range(0, len(cvlist)):
             tmp = np.array(output_list[ray_i])
             print(ray_i, tmp.shape)
             yhat_save += list(model.predict(tmp, verbose=1)[:,1])
+            
+        print('len(yhat_save), len(z_save)', len(yhat_save), len(z_save))
             
         msdict = {'yhat_save': yhat_save, 'z_save': z_save}
         if not(os.path.isfile(psave)) or True:
@@ -870,6 +915,17 @@ for cv in range(0, len(cvlist)):
             msdict = pickle.load(file)
             yhat_save = msdict['yhat_save']
             z_save = msdict['z_save']
+        
+        
+        if False:
+            white_ms = np.zeros((height, width)) * np.nan
+            for msi in range(len(yhat_save)):
+                white_ms[z_save[msi][0],  z_save[msi][1]] = yhat_save[msi]
+                # if z_save[msi][0] > 1000: 
+                #     print(111)
+                #     import sys;sys.exit()
+            plt.imshow(white_ms > 0.0)
+        
         
         # optimize threshold, contour_thr
         import time; start = time.time()  # 시작 시간 저장
@@ -929,7 +985,7 @@ for cv in range(0, len(cvlist)):
 mssave2 = []
 for i in tqdm(range(len(id_list))):
     msid = id_list[i][0]
-    idnum = int(id_list[i][1])
+    idnum = int(id_list[i][1]) #  's210331_3L'
     
     # yhat_save, z_save
     psave = weight_savepath + 'sample_n_' + msid + '.pickle'
@@ -952,10 +1008,23 @@ for i in tqdm(range(len(id_list))):
     marker_y = dictionary[msid]['marker_y']
     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
     polygon = dictionary[msid]['polygon']
+    points = dictionary[msid]['points']
+    
+    #%
+    # plt.imshow(t_im)
+    
+    # t_im2 = Image.fromarray((t_im).astype(np.uint8))
+    # pts = np.array([points],  np.int32)
+    # tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    # plt.imshow(tmp)
+    #%
     
     F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
                height=height, width=width, yhat_save=yhat_save, \
                    positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        
+    pix = np.where(msdict['predcit_img'][:,:,0] > 0)
+    pix2 = pix[0]
     
     predicted_cell_n = len(msdict['los'])
     
@@ -978,64 +1047,7 @@ for i in tqdm(range(len(id_list))):
 mssave2 = np.array(mssave2)
 
 
-#%% 20220609 - ROI 모두 지정 후 재평가
-# XYZ 없이, oldkey만 가지고 test result 불러 온 뒤, "optimize threshold, contour_thr" 만 진행 
 
-mssave5 = []
-for n_num in range(len(keylist)):
-    n = keylist[n_num]
-    test_image_no = dictionary[n]['oldkey']
-    psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
-
-    with open(psave, 'rb') as file:
-        msdict = pickle.load(file)
-        yhat_save = msdict['yhat_save']
-        z_save = msdict['z_save']
-    
-    #
-    
-    width = dictionary[n]['width']
-    height = dictionary[n]['length']
-    t_im = dictionary[n]['imread']
-    marker_x = dictionary[n]['marker_x']
-    marker_y = dictionary[n]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    
-    # polygon = dictionary2[n]['polygon']
-    
-    #
-    psave = mainpath + 'thr_optimized_f1score.pickle'
-    if not(os.path.isfile(psave)) or False:
-        with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
-            pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
-            print(psave, '저장되었습니다.')
-
-    # optimized data load
-    with open(psave, 'rb') as file:
-        mssave2 = pickle.load(file)
-    mssave2 = np.array(mssave2)
-    
-    #
-    
-    ix = np.where(mssave2[:,1] == test_image_no)[0][0]
-    threshold = 0.89
-    contour_thr = 99
-    
-    mssave = []
-    
-
-    F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
-               height=height, width=width, yhat_save=yhat_save, \
-                   positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
-        
-    # print(n, mssave2[ix,4], '>>' , F1_score)
-    
-    predicted_cell_n = len(msdict['los'])
-    
-    #
-    print(n, predicted_cell_n, F1_score)
-    mssave5.append([n, predicted_cell_n, F1_score])
- 
 
 #%% after optimization
 
