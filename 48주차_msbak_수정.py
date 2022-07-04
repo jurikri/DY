@@ -505,22 +505,49 @@ keylist = list(dictionary.keys())
 #%%
 #%% ROI check
 
-for i in range(len(keylist)):
-    test_image_no = keylist[i]
-    t_im = dictionary[test_image_no]['imread']
-    marker_x = dictionary[test_image_no]['marker_x']
-    marker_y = dictionary[test_image_no]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    polygon = dictionary[test_image_no]['polygon']
-    points = dictionary[test_image_no]['points']
+if False:
+    for i in range(len(keylist)):
+        test_image_no = keylist[i]
+        t_im = dictionary[test_image_no]['imread']
+        marker_x = dictionary[test_image_no]['marker_x']
+        marker_y = dictionary[test_image_no]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[test_image_no]['polygon']
+        points = dictionary[test_image_no]['points']
+    
+        pts = np.array([points],  np.int32)
+        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+        plt.figure()
+        plt.imshow(tmp)
+        plt.title(str(i) +'_'+ test_image_no)
 
-    pts = np.array([points],  np.int32)
-    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-    plt.figure()
-    plt.imshow(tmp)
-    plt.title(str(i) +'_'+ test_image_no)
-
-
+#%% marker check
+if False:
+    for i in tqdm(range(len(id_list))):
+        msid = id_list[i][0]
+        idnum = int(id_list[i][1]) #  's210331_3L'
+        
+        width = dictionary[msid]['width']
+        height = dictionary[msid]['length']
+        t_im = dictionary[msid]['imread']
+        marker_x = dictionary[msid]['marker_x']
+        marker_y = dictionary[msid]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[msid]['polygon']
+        points = dictionary[msid]['points']
+        
+        
+        #%
+        plt.imshow(t_im)
+        
+        pts = np.array([points],  np.int32)
+        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+        for nn in range(len(positive_indexs)):
+            tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
+        plt.imshow(tmp)
+        plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
+                    bbox_inches = 'tight', 
+                    pad_inches = 0)
 
 #%% XYZ gen
 for n_num in tqdm(range(len(keylist))):
@@ -681,7 +708,7 @@ for n_num in tqdm(range(len(keylist))):
             
             # if epochs == epoch: print(n, 'ng shorts')
         
-        if True:
+        if False:
             positive = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,1]==1))[0]
             negative = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,0]==1))[0]
             
@@ -775,7 +802,7 @@ import sys; sys.exit()
 
 #%%
 
-weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
+weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave_finalcheck\\'
 
 cv = 0; mssave2 = []
 # print(cvlist[cv][1])
@@ -818,71 +845,59 @@ for cv in range(0, len(cvlist)):
     # 2. test data
     if not(os.path.isfile(psave)):
         print('prep test data', cv)
+        gc.collect()
         model.load_weights(final_weightsave)
         rowmin = np.max([np.min(marker_y) - 50, 0])
         rowmax = np.min([np.max(marker_y) + 50, height])
         colmin = np.max([np.min(marker_x) - 50, 0])
         colmax = np.min([np.max(marker_x) + 50, width])
         retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
-
-        import time; start = time.time()  # 시작 시간 저장
         
+        
+        # allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
+        yhat_save = []
         z_save = []
         for row in tqdm(range(rowmin, rowmax)):
-            for col in range(colmin, colmax):
-                z_save.append([row,col])
-        z_save = np.array(z_save)
-        
-        import ray
-        cpus = 8
-        ray.shutdown()
-        ray.init(num_cpus=cpus)
-        
-        
-        from shapely.geometry import Point
-        @ray.remote
-        def ray_prep_testdata(raylist=None, colmin=None, sh=None, t_im=None, colmax=None, height=None, width=None):
             X_total_te = []
-            for row in raylist:
-                for col in range(colmin, colmax):
-                    y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                    crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                    if crop.shape == (29, 29, 3):
+            Z_total_te = []
+            for col in range(colmin, colmax):
+                y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                if crop.shape == (29, 29, 3):
+                    
+                    # note, 크기가 안맞는 경우가 있음
+                # note, padding이 양쪽으로 되는거 같은데
+                    # crop = crop / np.mean(crop)
+                    if not(polygon is None):
                         code = Point(col,row)
                         if code.within(polygon):
                             X_total_te.append(crop)
-            return X_total_te
-        
-        # ray-format
-        forlist = list(range(rowmin, rowmax))
-        div = int(len(forlist)/cpus)
-        output_ids = []
-        for cpu in range(cpus):
-            print('ray', cpu)
-            if cpu != cpus-1: raylist = forlist[cpu*div : (cpu+1)*div]
-            elif cpu == cpus-1: raylist = forlist[cpu*div :]
+                            Z_total_te.append([row, col])
+                    else:
+                        X_total_te.append(crop)
+                        Z_total_te.append([row, col])
             
-            output_ids.append(ray_prep_testdata.remote \
-                              (raylist=raylist, colmin=colmin, sh=sh, \
-                               t_im=t_im, colmax=colmax, height=height, \
-                                   width=width))
-                
-        output_list = ray.get(output_ids)
-        
-        yhat_save = []
-        for ray_i in range(len(output_list)):
-            tmp = np.array(output_list[ray_i])
-            print(ray_i, tmp.shape)
-            yhat_save += list(model.predict(tmp, verbose=1)[:,1])
-            
+            if len(X_total_te) > 0:
+                X_total_te = np.array(X_total_te)
+                yhat = model.predict(X_total_te, verbose=0)
+                for i in range(len(yhat)):
+                    row = Z_total_te[i][0]
+                    col = Z_total_te[i][1]
+                    # allo[row, col] = yhat[i,1]
+                yhat_save += list(yhat[:,1])
+                z_save += Z_total_te
+        z_save = np.array(z_save)
         msdict = {'yhat_save': yhat_save, 'z_save': z_save}
+        
         if not(os.path.isfile(psave)) or True:
             with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
                 pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
                 print(psave, '저장되었습니다.')
-                
-        gc.collect()
-        t1 = time.time() - start; print('\n', "time :", t1)  # 현재시각 - 시작시간 = 실행 시간
+
+    with open(psave, 'rb') as file:
+        msdict = pickle.load(file)
+        yhat_save = msdict['yhat_save']
+        z_save = msdict['z_save']
     
     # 3. F1 score optimization
     psave2 = weight_savepath + 'F1_parameters_' + str(test_image_no) + '.pickle'
@@ -977,12 +992,12 @@ for i in tqdm(range(len(id_list))):
     points = dictionary[msid]['points']
     
     #%
-    plt.imshow(t_im)
+    # plt.imshow(t_im)
     
-    t_im2 = Image.fromarray((t_im).astype(np.uint8))
-    pts = np.array([points],  np.int32)
-    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-    plt.imshow(tmp)
+    # t_im2 = Image.fromarray((t_im).astype(np.uint8))
+    # pts = np.array([points],  np.int32)
+    # tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    # plt.imshow(tmp)
     #%
     
     F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
@@ -996,7 +1011,7 @@ for i in tqdm(range(len(id_list))):
     tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
     mssave2.append(tmp)
     
-    if True:
+    if False:
         plt.figure()
         plt.subplot(2, 1, 1)
         plt.title(msid + ' _truth_img')
