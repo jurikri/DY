@@ -24,106 +24,113 @@ import matplotlib.image as img
 import pandas as pd
 import gc
 #%% rawdata_dict gen
+mainpath = 'C:\\SynologyDrive\\study\\dy\\52\\'
+psave = mainpath +'data_52_ms.pickle'
 
-# img load, id list gen
-img_list = []
-id_list = []
-path = 'C:\\SynologyDrive\\study\\dy\\52\\imgs\\'
-cnt = 0
-for (path, dir, files) in os.walk(path):
-    for filename in files:
-        ext = os.path.splitext(filename)[-1]
-        if ext == '.jpg':
-            print("%s/%s" % (path, filename))
-            
-            filepath = path + '//' + filename
-            msid = filename[:-4]
-            id_list.append([msid, cnt]); cnt += 1
-            img_list.append([msid, filepath])
-img_list = np.array(img_list)
-id_list = np.array(id_list)
-
-# marker load
-marker_list = []
-path = 'C:\\SynologyDrive\\study\\dy\\52\\markers\\'
-for (path, dir, files) in os.walk(path):
-    for filename in files:
-        ext = os.path.splitext(filename)[-1]
-        if ext == '.csv':
-            print("%s/%s" % (path, filename))
-            
-            filepath = path + '//' + filename
-            msid = filename[12:-4]
-            if not(msid in id_list[:,0]): print(filename, 'missing')
-            marker_list.append([msid, filepath])
-marker_list = np.array(marker_list)
-
-# ROI load (will be added)
-
-ROI_list = []
-path = 'C:\\SynologyDrive\\study\\dy\\52\\roiBorder\\'
-for (path, dir, files) in os.walk(path):
-    for filename in files:
-        ext = os.path.splitext(filename)[-1]
-        if ext == '.csv':
-            print("%s/%s" % (path, filename))
-            
-            filepath = path + '//' + filename
-            msid = filename[10:-11]
-            if not(msid in id_list[:,0]): print(filename, 'missing')
-            ROI_list.append([msid, filepath])
-ROI_list = np.array(ROI_list)
-
-# gen dict from key(=id)
-
-dic = {}
-for i in tqdm(range(len(id_list))):
-    msid = id_list[i][0]
+if not(os.path.isfile(psave)):
+    # img load, id list gen
+    img_list = []
+    id_list = []
     
-    # if msid == 's210331_3L':
-    #     import sys;sys.exit()
+    path = str(mainpath)
+    cnt = 0
+    for (path, dir, files) in os.walk(path):
+        for filename in files:
+            ext = os.path.splitext(filename)[-1]
+            if ext == '.jpg':
+                print("%s/%s" % (path, filename))
+                
+                filepath = path + '//' + filename
+                msid = filename[:-4]
+                id_list.append([msid, cnt]); cnt += 1
+                img_list.append([msid, filepath])
+    img_list = np.array(img_list)
+    id_list = np.array(id_list)
     
-    # image
-    idix = np.where(img_list[:,0] == msid)[0][0]
-    im = img.imread(img_list[idix, 1])
-    image = Image.open(img_list[idix, 1])
-    width = image.size[0]
-    length = image.size[1]
+    # marker load
+    marker_list = []
+    path = mainpath + 'markers\\'
+    for (path, dir, files) in os.walk(path):
+        for filename in files:
+            ext = os.path.splitext(filename)[-1]
+            if ext == '.csv':
+                print("%s/%s" % (path, filename))
+                
+                filepath = path + '//' + filename
+                msid = filename[12:-4]
+                if not(msid in id_list[:,0]): print(filename, 'missing')
+                marker_list.append([msid, filepath])
+    marker_list = np.array(marker_list)
     
-    # ROI
-    try:
-        idix = np.where(ROI_list[:,0] == msid)[0][0]
-        df = np.array(pd.read_csv(ROI_list[idix, 1]))
-        points = []
-        for j in range(len(df)):
-            points.append([int(df[j,0])*2, int(df[j,1])*2])
-        polygon = Polygon(points)
-    except:
-        print(msid)
+    # ROI load (will be added)
     
-    # marker
-    idix = np.where(marker_list[:,0] == msid)[0][0]
-    df = np.array(pd.read_csv(marker_list[idix, 1]))
-    marker_x = np.array(df[:,2], dtype=int)
-    marker_y = np.array(df[:,3], dtype=int)
-
-    r_dict = {'marker_x':marker_x,
-              'marker_y':marker_y,
-              'imread': im,
-              'width': width,
-              'length': length,
-              'points': points,
-              'polygon': polygon}
+    ROI_list = []
+    path = mainpath + 'roiBorder\\'
+    for (path, dir, files) in os.walk(path):
+        for filename in files:
+            ext = os.path.splitext(filename)[-1]
+            if ext == '.csv':
+                print("%s/%s" % (path, filename))
+                
+                filepath = path + '//' + filename
+                msid = filename[10:-11]
+                if not(msid in id_list[:,0]): print(filename, 'missing')
+                ROI_list.append([msid, filepath])
+    ROI_list = np.array(ROI_list)
     
-    dic[msid] = r_dict
-
-psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
-with open(psave, 'wb') as file:
-    pickle.dump(dic, file)
-    print(psave, '저장되었습니다.')
+    # gen dict from key(=id)
+    
+    dic = {}
+    for i in tqdm(range(len(id_list))):
+        msid = id_list[i][0]
+        
+        # if msid == 's210331_3L':
+        #     import sys;sys.exit()
+        
+        # image
+        idix = np.where(img_list[:,0] == msid)[0][0]
+        im = img.imread(img_list[idix, 1])
+        image = Image.open(img_list[idix, 1])
+        width = image.size[0]
+        length = image.size[1]
+        
+        # ROI
+        try:
+            idix = np.where(ROI_list[:,0] == msid)[0][0]
+            df = np.array(pd.read_csv(ROI_list[idix, 1]))
+            points = []
+            for j in range(len(df)):
+                points.append([int(df[j,0])*2, int(df[j,1])*2])
+            polygon = Polygon(points)
+        except:
+            print(msid)
+        
+        # marker
+        idix = np.where(marker_list[:,0] == msid)[0][0]
+        df = np.array(pd.read_csv(marker_list[idix, 1]))
+        marker_x = np.array(df[:,2], dtype=int)
+        marker_y = np.array(df[:,3], dtype=int)
+    
+        r_dict = {'marker_x':marker_x,
+                  'marker_y':marker_y,
+                  'imread': im,
+                  'width': width,
+                  'length': length,
+                  'points': points,
+                  'polygon': polygon}
+        
+        dic[msid] = r_dict
+    
+    with open(psave, 'wb') as file:
+        pickle.dump(dic, file)
+        print(psave, '저장되었습니다.')
+        
+with open(mainpath +'data_52_ms.pickle', 'rb') as file:
+    dictionary = pickle.load(file)
+keylist = list(dictionary.keys())
 
 #%% """HYPERPARAMETERS"""
-mainpath = 'C:\\SynologyDrive\\study\\dy\\48\\'
+# mainpath = 'C:\\SynologyDrive\\study\\dy\\48\\'
 nct = 50 # INTENSITY 조정값
 B = 0.5 # NEGATIVE CROP INT 적용 CROP 비율
 
@@ -318,8 +325,8 @@ def get_F1(threshold=None, contour_thr=None,\
 
     # predicted cells area
     dots = pink
-    white4 = dot_expand(height=height, width=width, dots=dots)
-        
+    
+    # white4 = dot_expand(height=height, width=width, dots=dots)
     # plt.imshow(white4)    # prediction area
 
     # co = ground truth center point
@@ -346,8 +353,6 @@ def get_F1(threshold=None, contour_thr=None,\
     tp_list = list(set(co)-set(fn_list))
     tp = len(tp_list)
     fp = len(los) - tp
-    
-    
     
     # precision = tp/(tp+fp)
     # recall = tp / (tp+fn)
@@ -496,57 +501,54 @@ def gen_total_index(height=None, width=None, polygon=None, retangle_roi_dict=Non
 #     pickle.dump(dic, file)
 #     print(psave, '저장되었습니다.')
     
-ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
-with open(ms_filepath2, 'rb') as file:
-    dictionary = pickle.load(file)
+# ms_filepath2 = 
 
-keylist = list(dictionary.keys())
 
 #%%
 #%% ROI check
-
-for i in range(len(keylist)):
-    test_image_no = keylist[i]
-    t_im = dictionary[test_image_no]['imread']
-    marker_x = dictionary[test_image_no]['marker_x']
-    marker_y = dictionary[test_image_no]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    polygon = dictionary[test_image_no]['polygon']
-    points = dictionary[test_image_no]['points']
-
-    pts = np.array([points],  np.int32)
-    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-    plt.figure()
-    plt.imshow(tmp)
-    plt.title(str(i) +'_'+ test_image_no)
+if False:
+    for i in range(len(keylist)):
+        test_image_no = keylist[i]
+        t_im = dictionary[test_image_no]['imread']
+        marker_x = dictionary[test_image_no]['marker_x']
+        marker_y = dictionary[test_image_no]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[test_image_no]['polygon']
+        points = dictionary[test_image_no]['points']
+    
+        pts = np.array([points],  np.int32)
+        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+        plt.figure()
+        plt.imshow(tmp)
+        plt.title(str(i) +'_'+ test_image_no)
 
 #%% marker check
-
-for i in tqdm(range(len(id_list))):
-    msid = id_list[i][0]
-    idnum = int(id_list[i][1]) #  's210331_3L'
-    
-    width = dictionary[msid]['width']
-    height = dictionary[msid]['length']
-    t_im = dictionary[msid]['imread']
-    marker_x = dictionary[msid]['marker_x']
-    marker_y = dictionary[msid]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    polygon = dictionary[msid]['polygon']
-    points = dictionary[msid]['points']
-    
-    
-    #%
-    plt.imshow(t_im)
-    
-    pts = np.array([points],  np.int32)
-    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-    for nn in range(len(positive_indexs)):
-        tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
-    plt.imshow(tmp)
-    plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
-                bbox_inches = 'tight', 
-                pad_inches = 0)
+if False:
+    for i in tqdm(range(len(id_list))):
+        msid = id_list[i][0]
+        idnum = int(id_list[i][1]) #  's210331_3L'
+        
+        width = dictionary[msid]['width']
+        height = dictionary[msid]['length']
+        t_im = dictionary[msid]['imread']
+        marker_x = dictionary[msid]['marker_x']
+        marker_y = dictionary[msid]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[msid]['polygon']
+        points = dictionary[msid]['points']
+        
+        
+        #%
+        plt.imshow(t_im)
+        
+        pts = np.array([points],  np.int32)
+        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+        for nn in range(len(positive_indexs)):
+            tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
+        plt.imshow(tmp)
+        plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
+                    bbox_inches = 'tight', 
+                    pad_inches = 0)
 
 #%% XYZ gen
 for n_num in tqdm(range(len(keylist))):
@@ -797,22 +799,22 @@ for se in range(len(session_list)):
 
 print('len(cvlist)', len(cvlist))
 
+weight_savepath = mainpath + 'weightsave\\'
 import sys; sys.exit()
 
-#%%
+#%% pathset 
 
-weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
 
-cv = 0; mssave2 = []
+#%% weight training
+
 # print(cvlist[cv][1])
 
 # save step
 # 1. weight
 # 2. test data
 # 3. F1 score optimization
-
+cv = 0;
 for cv in range(0, len(cvlist)):
-    
     # 1. weight
     print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
@@ -828,8 +830,19 @@ for cv in range(0, len(cvlist)):
         
         gc.collect()
         tf.keras.backend.clear_session()
+        
+#%% # 2. test data prep
+        
+cv = 0;
 
+div_for_memory = 5 # 몇등분 할건지
+
+for cv in range(0, len(cvlist)):
     # common load
+    print('cv', cv)
+    weight_savename = 'cv_' + str(cv) + '_subject_' + str(cvlist[cv][1]) + '_total_final.h5'
+    final_weightsave = weight_savepath + weight_savename
+    
     test_image_no = cvlist[cv][1]
     psave = weight_savepath + 'sample_n_' + str(test_image_no) + '.pickle'
     width = dictionary[test_image_no]['width']
@@ -845,48 +858,91 @@ for cv in range(0, len(cvlist)):
     if not(os.path.isfile(psave)):
         print('prep test data', cv)
         model.load_weights(final_weightsave)
+        
         rowmin = np.max([np.min(marker_y) - 50, 0])
         rowmax = np.min([np.max(marker_y) + 50, height])
         colmin = np.max([np.min(marker_x) - 50, 0])
         colmax = np.min([np.max(marker_x) + 50, width])
-        retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
+        # retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
         
-        
-        # allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
-        yhat_save = []
-        z_save = []
-        for row in tqdm(range(rowmin, rowmax)):
-            X_total_te = []
-            Z_total_te = []
-            for col in range(colmin, colmax):
-                y=row; x=col; unit=sh; im=t_im; height=height; width=width
-                crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
-                if crop.shape == (29, 29, 3):
-                    
-                    # note, 크기가 안맞는 경우가 있음
-                # note, padding이 양쪽으로 되는거 같은데
-                    # crop = crop / np.mean(crop)
-                    if not(polygon is None):
-                        code = Point(col,row)
-                        if code.within(polygon):
-                            X_total_te.append(crop)
-                            Z_total_te.append([row, col])
-                    else:
-                        X_total_te.append(crop)
-                        Z_total_te.append([row, col])
+        # 아래 함수를 이용하여 GUI를 구성하세요.
+        def ms_prep_and_predict(t_im=None, sh=14, \
+                                rowmin=None, rowmax=None, colmin=None, colmax=None,\
+                                find_square=find_square, model=None, 
+                                polygon=None, divnum=10):
             
-            if len(X_total_te) > 0:
-                X_total_te = np.array(X_total_te)
-                yhat = model.predict(X_total_te, verbose=0)
-                for i in range(len(yhat)):
-                    row = Z_total_te[i][0]
-                    col = Z_total_te[i][1]
-                    # allo[row, col] = yhat[i,1]
-                yhat_save += list(yhat[:,1])
-                z_save += Z_total_te
-        z_save = np.array(z_save)
-        msdict = {'yhat_save': yhat_save, 'z_save': z_save}
+            """
+            t_im = test할 image
+            sh = half size (14로 고정)
+            rowmin=None, rowmax=None, colmin=None, colmax=None
+            ->  image에 모든 영역을 test 하지않고, 일부분만 test하기 위한 변수들
+                사용자가 직접 지정하거나, 사용자가 지정한 ROI를 기반으로 결정하면 될듯
+            
+            find_square = 사용자 정의함수 그대로 받음
+            model = keras 모델, 학습된 weight 까지 load 한다음 전달 할것
+            
+            polygon = test 할 image의 polygon
+            (polygon으로 rowmin, rowmax, colmin, olmax를 정하게 해도 될듯)
+            
+            divnum = memory 부족 문제 해결을 위해 몇번에 걸쳐 나눌건지
+            
+            """
+            from shapely.geometry import Point
+            import numpy as np
+            
+            height = t_im.shape[0]
+            width = t_im.shape[1]
         
+            # allo = np.zeros((t_im.shape[0], t_im.shape[1])) * np.nan
+            yhat_save = []
+            z_save = []
+            
+            forlist = list(range(rowmin, rowmax))
+            div = int(len(forlist)/divnum)
+            for div_i in range(divnum):
+                print('div', div_i)
+                if div_i != divnum-1: forlist_div = forlist[div_i*div : (div_i+1)*div]
+                elif div_i== divnum-1: forlist_div = forlist[div_i*div :]
+            
+                for row in forlist_div:
+                    X_total_te = []
+                    Z_total_te = []
+                    for col in range(colmin, colmax):
+                        y=row; x=col; unit=sh; im=t_im; height=height; width=width
+                        crop = find_square(y=y, x=x, unit=unit, im=im, height=height, width=width)
+                        if crop.shape == (29, 29, 3):
+                            
+                            # note, 크기가 안맞는 경우가 있음
+                        # note, padding이 양쪽으로 되는거 같은데
+                            # crop = crop / np.mean(crop)
+                            if not(polygon is None):
+                                code = Point(col,row)
+                                if code.within(polygon):
+                                    X_total_te.append(crop)
+                                    Z_total_te.append([row, col])
+                            else:
+                                X_total_te.append(crop)
+                                Z_total_te.append([row, col])
+                    
+                    if len(X_total_te) > 0:
+                        X_total_te = np.array(X_total_te)
+                        yhat = model.predict(X_total_te, verbose=0)
+                        for i in range(len(yhat)):
+                            row = Z_total_te[i][0]
+                            col = Z_total_te[i][1]
+                            # allo[row, col] = yhat[i,1]
+                        yhat_save += list(yhat[:,1])
+                        z_save += Z_total_te
+                        
+            z_save = np.array(z_save)
+            msdict = {'yhat_save': yhat_save, 'z_save': z_save}
+            return msdict
+        
+        msdict = ms_prep_and_predict(t_im=t_im, sh=14, \
+                                rowmin=rowmin, rowmax=rowmax, colmin=colmin, colmax=colmax,\
+                                find_square=find_square, model=model, 
+                                polygon=polygon, divnum=10)
+            
         if not(os.path.isfile(psave)) or True:
             with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
                 pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
@@ -896,8 +952,10 @@ for cv in range(0, len(cvlist)):
         msdict = pickle.load(file)
         yhat_save = msdict['yhat_save']
         z_save = msdict['z_save']
-    
-    # 3. F1 score optimization
+        
+#%% 3. F1 score optimization
+for cv in range(0, len(cvlist)):
+    test_image_no = cvlist[cv][1]
     psave2 = weight_savepath + 'F1_parameters_' + str(test_image_no) + '.pickle'
     if not(os.path.isfile(psave2)) or False:
         print('cv F1calc start', cv)
