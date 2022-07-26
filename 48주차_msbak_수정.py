@@ -505,49 +505,48 @@ keylist = list(dictionary.keys())
 #%%
 #%% ROI check
 
-if False:
-    for i in range(len(keylist)):
-        test_image_no = keylist[i]
-        t_im = dictionary[test_image_no]['imread']
-        marker_x = dictionary[test_image_no]['marker_x']
-        marker_y = dictionary[test_image_no]['marker_y']
-        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-        polygon = dictionary[test_image_no]['polygon']
-        points = dictionary[test_image_no]['points']
-    
-        pts = np.array([points],  np.int32)
-        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-        plt.figure()
-        plt.imshow(tmp)
-        plt.title(str(i) +'_'+ test_image_no)
+for i in range(len(keylist)):
+    test_image_no = keylist[i]
+    t_im = dictionary[test_image_no]['imread']
+    marker_x = dictionary[test_image_no]['marker_x']
+    marker_y = dictionary[test_image_no]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[test_image_no]['polygon']
+    points = dictionary[test_image_no]['points']
+
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    plt.figure()
+    plt.imshow(tmp)
+    plt.title(str(i) +'_'+ test_image_no)
 
 #%% marker check
-if False:
-    for i in tqdm(range(len(id_list))):
-        msid = id_list[i][0]
-        idnum = int(id_list[i][1]) #  's210331_3L'
-        
-        width = dictionary[msid]['width']
-        height = dictionary[msid]['length']
-        t_im = dictionary[msid]['imread']
-        marker_x = dictionary[msid]['marker_x']
-        marker_y = dictionary[msid]['marker_y']
-        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-        polygon = dictionary[msid]['polygon']
-        points = dictionary[msid]['points']
-        
-        
-        #%
-        plt.imshow(t_im)
-        
-        pts = np.array([points],  np.int32)
-        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-        for nn in range(len(positive_indexs)):
-            tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
-        plt.imshow(tmp)
-        plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
-                    bbox_inches = 'tight', 
-                    pad_inches = 0)
+
+for i in tqdm(range(len(id_list))):
+    msid = id_list[i][0]
+    idnum = int(id_list[i][1]) #  's210331_3L'
+    
+    width = dictionary[msid]['width']
+    height = dictionary[msid]['length']
+    t_im = dictionary[msid]['imread']
+    marker_x = dictionary[msid]['marker_x']
+    marker_y = dictionary[msid]['marker_y']
+    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+    polygon = dictionary[msid]['polygon']
+    points = dictionary[msid]['points']
+    
+    
+    #%
+    plt.imshow(t_im)
+    
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    for nn in range(len(positive_indexs)):
+        tmp = cv2.circle(tmp, [marker_x[nn], marker_y[nn]], 3, (0,255,255), -1)  
+    plt.imshow(tmp)
+    plt.savefig('C:\\SynologyDrive\\study\\dy\\52\\figsave2\\'+id_list[i][0]+ '-result.jpg', dpi = 300, 
+                bbox_inches = 'tight', 
+                pad_inches = 0)
 
 #%% XYZ gen
 for n_num in tqdm(range(len(keylist))):
@@ -708,7 +707,7 @@ for n_num in tqdm(range(len(keylist))):
             
             # if epochs == epoch: print(n, 'ng shorts')
         
-        if False:
+        if True:
             positive = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,1]==1))[0]
             negative = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,0]==1))[0]
             
@@ -802,7 +801,7 @@ import sys; sys.exit()
 
 #%%
 
-weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave_finalcheck\\'
+weight_savepath = 'C:\\SynologyDrive\\study\\dy\\52\\weightsave\\'
 
 cv = 0; mssave2 = []
 # print(cvlist[cv][1])
@@ -845,7 +844,6 @@ for cv in range(0, len(cvlist)):
     # 2. test data
     if not(os.path.isfile(psave)):
         print('prep test data', cv)
-        gc.collect()
         model.load_weights(final_weightsave)
         rowmin = np.max([np.min(marker_y) - 50, 0])
         rowmax = np.min([np.max(marker_y) + 50, height])
@@ -992,12 +990,12 @@ for i in tqdm(range(len(id_list))):
     points = dictionary[msid]['points']
     
     #%
-    # plt.imshow(t_im)
+    plt.imshow(t_im)
     
-    # t_im2 = Image.fromarray((t_im).astype(np.uint8))
-    # pts = np.array([points],  np.int32)
-    # tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-    # plt.imshow(tmp)
+    t_im2 = Image.fromarray((t_im).astype(np.uint8))
+    pts = np.array([points],  np.int32)
+    tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+    plt.imshow(tmp)
     #%
     
     F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
@@ -1011,7 +1009,7 @@ for i in tqdm(range(len(id_list))):
     tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
     mssave2.append(tmp)
     
-    if False:
+    if True:
         plt.figure()
         plt.subplot(2, 1, 1)
         plt.title(msid + ' _truth_img')
@@ -1030,60 +1028,60 @@ mssave2 = np.array(mssave2)
 #%% 20220609 - ROI 모두 지정 후 재평가
 # XYZ 없이, oldkey만 가지고 test result 불러 온 뒤, "optimize threshold, contour_thr" 만 진행 
 
-mssave5 = []
-for n_num in range(len(keylist)):
-    n = keylist[n_num]
-    test_image_no = dictionary[n]['oldkey']
-    psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
+# mssave5 = []
+# for n_num in range(len(keylist)):
+#     n = keylist[n_num]
+#     test_image_no = dictionary[n]['oldkey']
+#     psave = mainpath + 'sample_n_' + str(test_image_no) + '.pickle'
 
-    with open(psave, 'rb') as file:
-        msdict = pickle.load(file)
-        yhat_save = msdict['yhat_save']
-        z_save = msdict['z_save']
+#     with open(psave, 'rb') as file:
+#         msdict = pickle.load(file)
+#         yhat_save = msdict['yhat_save']
+#         z_save = msdict['z_save']
     
-    #
+#     #
     
-    width = dictionary[n]['width']
-    height = dictionary[n]['length']
-    t_im = dictionary[n]['imread']
-    marker_x = dictionary[n]['marker_x']
-    marker_y = dictionary[n]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+#     width = dictionary[n]['width']
+#     height = dictionary[n]['length']
+#     t_im = dictionary[n]['imread']
+#     marker_x = dictionary[n]['marker_x']
+#     marker_y = dictionary[n]['marker_y']
+#     positive_indexs = np.transpose(np.array([marker_y, marker_x]))
     
-    # polygon = dictionary2[n]['polygon']
+#     # polygon = dictionary2[n]['polygon']
     
-    #
-    psave = mainpath + 'thr_optimized_f1score.pickle'
-    if not(os.path.isfile(psave)) or False:
-        with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
-            pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
-            print(psave, '저장되었습니다.')
+#     #
+#     psave = mainpath + 'thr_optimized_f1score.pickle'
+#     if not(os.path.isfile(psave)) or False:
+#         with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
+#             pickle.dump(mssave2, f, pickle.HIGHEST_PROTOCOL)
+#             print(psave, '저장되었습니다.')
 
-    # optimized data load
-    with open(psave, 'rb') as file:
-        mssave2 = pickle.load(file)
-    mssave2 = np.array(mssave2)
+#     # optimized data load
+#     with open(psave, 'rb') as file:
+#         mssave2 = pickle.load(file)
+#     mssave2 = np.array(mssave2)
     
-    #
+#     #
     
-    ix = np.where(mssave2[:,1] == test_image_no)[0][0]
-    threshold = 0.89
-    contour_thr = 99
+#     ix = np.where(mssave2[:,1] == test_image_no)[0][0]
+#     threshold = 0.89
+#     contour_thr = 99
     
-    mssave = []
+#     mssave = []
     
 
-    F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
-               height=height, width=width, yhat_save=yhat_save, \
-                   positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+#     F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+#                height=height, width=width, yhat_save=yhat_save, \
+#                    positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
         
-    # print(n, mssave2[ix,4], '>>' , F1_score)
+#     # print(n, mssave2[ix,4], '>>' , F1_score)
     
-    predicted_cell_n = len(msdict['los'])
+#     predicted_cell_n = len(msdict['los'])
     
-    #
-    print(n, predicted_cell_n, F1_score)
-    mssave5.append([n, predicted_cell_n, F1_score])
+#     #
+#     print(n, predicted_cell_n, F1_score)
+#     mssave5.append([n, predicted_cell_n, F1_score])
  
 
 #%% after optimization
