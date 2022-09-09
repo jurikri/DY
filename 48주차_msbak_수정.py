@@ -79,7 +79,6 @@ if not(os.path.isfile(psave)):
     ROI_list = np.array(ROI_list)
     
     # gen dict from key(=id)
-    
     dic = {}
     for i in tqdm(range(len(id_list))):
         msid = id_list[i][0]
@@ -462,49 +461,7 @@ def gen_total_index(height=None, width=None, polygon=None, retangle_roi_dict=Non
 
 # total_index = gen_total_index(height=768, width=1254, polygon=None)
 # total_index_save = {'768_1254' : total_index}
-#%% XYZgen """train X, Y 만들기"""
 
-# ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_48.pickle'
-# with open(ms_filepath, 'rb') as file:
-#     dictionary_old = pickle.load(file)
-
-# ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_48.pickle'
-# with open(ms_filepath2, 'rb') as file:
-#     dictionary2_old = pickle.load(file)
-
-# ms_filepath = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'data_51.pickle'
-# with open(ms_filepath, 'rb') as file:
-#     dictionary = pickle.load(file)
-
-# ms_filepath2 = 'C:\\SynologyDrive\\study\\dy\\48\\' + 'roipoints_51.pickle'
-# with open(ms_filepath2, 'rb') as file:
-#     dictionary2 = pickle.load(file)
-
-# keylist = list(dictionary.keys())
-# keylist2 = list(dictionary2.keys())
-
-# #%% key 매칭 old - new
-# for n_num in range(len(keylist)):
-#     n = keylist[n_num]
-#     marker_x = dictionary[n]['marker_x']
-    
-#     for i in range(len(dictionary_old)):
-#         oldkey = list(dictionary_old.keys())
-#         marker_x_old = dictionary_old[oldkey[i]]['marker_x']
-#         if len(marker_x_old) == len(marker_x):
-#             if np.sum(np.abs(np.array(marker_x_old) - np.array(marker_x)))==0:
-#                 print(n_num, oldkey[i])
-#                 dictionary[n]['oldkey'] = oldkey[i]
-
-# psave = 'C:\\SynologyDrive\\study\\dy\\52\\' +'data_52_ms.pickle'
-# with open(psave, 'wb') as file:
-#     pickle.dump(dic, file)
-#     print(psave, '저장되었습니다.')
-    
-# ms_filepath2 = 
-
-
-#%%
 #%% ROI check
 if False:
     for i in range(len(keylist)):
@@ -684,31 +641,7 @@ for n_num in tqdm(range(len(keylist))):
                      X.append(pc)
                      Y.append([1,0])
                      Z.append([n, row, col])
-        
-        # roi 바깥쪽
-        # negative_cnt = 0
-        # for epoch in range(epochs):
-        #     if negative_cnt > len(marker_x) * 2: break
-    
-        #     row = random.randint(rowmin, rowmax)
-        #     col = random.randint(colmin, colmax)
-            
-        #     if not (row,col) in gap_index:
-        #         passsw = False
-        #         if not polygon is None:
-        #             code = Point(col,row)
-        #             if not(code.within(polygon)): passsw = True
-        #         else: passsw = True
-        #         if passsw:
-        #             pc = find_square(y=row, x=col, unit=size_hf, im=im, height=height, width=width)
-        
-        #             negative_cnt += 1
-        #             X.append(pc)
-        #             Y.append([1,0])
-        #             Z.append([n, row, col])
-            
-            # if epochs == epoch: print(n, 'ng shorts')
-        
+
         if True:
             positive = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,1]==1))[0]
             negative = np.where(np.logical_and(np.array(Z)[:,0]==n, np.array(Y)[:,0]==1))[0]
@@ -801,9 +734,6 @@ print('len(cvlist)', len(cvlist))
 
 weight_savepath = mainpath + 'weightsave\\'
 import sys; sys.exit()
-
-#%% pathset 
-
 
 #%% weight training
 
@@ -952,7 +882,70 @@ for cv in range(0, len(cvlist)):
         msdict = pickle.load(file)
         yhat_save = msdict['yhat_save']
         z_save = msdict['z_save']
+
         
+#%% extratest - 박선영선생님 dataset
+
+test_image_no = list(dictionary.keys())[2]
+
+width = dictionary[test_image_no]['width']
+height = dictionary[test_image_no]['length']
+t_im = dictionary[test_image_no]['imread']
+print(width, height)
+
+imsavepath = 'C:\\SynologyDrive\\study\dy\\56\\'
+ex_mainpath = 'C:\\SynologyDrive\\study\\dy\\TH_박선영선생님\\TH\\'
+flist = os.listdir(ex_mainpath)
+for i in range(len(flist)):
+    filename = flist[i]
+    im = img.imread(ex_mainpath + filename)
+    
+    width = im.shape[1]
+    height = im.shape[0]
+    
+    dst1 = cv2.resize(im, (int(round(width/2.5)), int(round(height/2.5))), \
+                             interpolation=cv2.INTER_AREA)
+    
+   
+    pil_image = Image.fromarray(dst1)
+    pil_image.save(imsavepath + flist[i] + '_resize.jpg')
+    
+    # plt.imshow(dst1)
+    
+plt.imshow(im)
+print(im.shape)
+
+
+rwidth = int(round(width/2.5))
+rheight = int(round(height/2.5))
+
+sh, sw = 400, 400
+
+plt.imshow(t_im[sh:sh+rheight,sw:sw+rwidth])
+
+image = Image.open(img_list[idix, 1])
+width = image.size[0]
+length = image.size[1]
+
+dst1 = cv2.resize(im, (int(round(width/2.5)), int(round(height/2.5))), \
+                         interpolation=cv2.INTER_AREA)
+
+plt.imshow(dst1)
+print(dst1.shape)
+
+msdict = ms_prep_and_predict(t_im=dst1, sh=14, \
+                        rowmin=0, rowmax=dst1.shape[0], colmin=0, colmax=dst1.shape[1],\
+                        find_square=find_square, model=model, 
+                        polygon=None, divnum=10)
+
+    
+from PIL import Image
+ 
+# 이미지 JPG로 저장
+
+
+#%%
+
 #%% 3. F1 score optimization
 for cv in range(0, len(cvlist)):
     test_image_no = cvlist[cv][1]
