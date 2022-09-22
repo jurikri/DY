@@ -266,6 +266,8 @@ def get_F1(threshold=None, contour_thr=None,\
     return F1_score, msdict
 
 #%% keras setup
+import tensorflow_addons as tfa
+metric = tfa.metrics.F1Score(num_classes=2, threshold=0.5)
 
 def model_setup(xs=None, ys=None, lr=1e-4, lnn=8):
     from tensorflow.keras.optimizers import Adam
@@ -292,7 +294,7 @@ def model_setup(xs=None, ys=None, lr=1e-4, lnn=8):
     model.add(layers.Dense(ys, activation='softmax'))
 
     model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
-                  loss='categorical_crossentropy', metrics=['accuracy']) 
+                  loss='categorical_crossentropy', metrics=metric) 
     
     return model
 
@@ -742,9 +744,8 @@ for cv in forlist3: # range(0, len(cvlist)):
         Xtr = X2[trlist]; Ytr = Y2[trlist]
         Xte = X2[telist]; Yte = Y2[telist]
         
-        if True:
-            hist = model.fit(X2[trlist], Y2[trlist], epochs=4, verbose=1, batch_size = 2**4, \
-                             validation_data = (X2[telist], Y2[telist]))
+        hist = model.fit(X2[trlist], Y2[trlist], epochs=4, verbose=1, batch_size = 2**4, \
+                         validation_data = (X2[telist], Y2[telist]))
         
         model.save_weights(final_weightsave)
 
