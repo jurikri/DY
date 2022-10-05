@@ -1109,26 +1109,13 @@ for cv in range(len(cvlist)):
             colmin = np.max([np.min(marker_x2) - 50, SIZE_HF])
             colmax = np.min([np.max(marker_x2) + 50, width-SIZE_HF])
             
-            # from shapely.geometry import Point
-            # import numpy as np
-            import time; start = time.time()  # 시작 시간 저장
-            import ray
-            cpus = 12
-            ray.shutdown()
-            ray.init(num_cpus=cpus)
-
             yhat_save = []
             z_save = []
             
+            divnum = 10
             forlist = list(range(rowmin, rowmax))
             div = int(len(forlist)/divnum)
 
-            ##
-            
-            
-
-            ##
-        
             for div_i in range(divnum):
                 print('div', div_i)
                 if div_i != divnum-1: forlist_div = forlist[div_i*div : (div_i+1)*div]
@@ -1171,10 +1158,6 @@ for cv in range(len(cvlist)):
                     pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
                     print(psave, '저장되었습니다.')
 
-    # with open(psave, 'rb') as file:
-    #     msdict = pickle.load(file)
-    #     yhat_save = msdict['yhat_save']
-    #     z_save = msdict['z_save']
 
 #%% 3. F1 score optimization
 
