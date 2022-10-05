@@ -327,13 +327,14 @@ def get_F1(threshold=None, contour_thr=None,\
     noback_img = np.zeros((height, width, 3), np.uint8)
     noback_img[:]= [255,255,0]
     
+    # test_img = np.zeros((height, width))
+
     vix = np.where(np.array(yhat_save) > threshold)[0]
     for i in vix:
         row = z_save[i][0]
         col = z_save[i][1]
         noback_img[row,col] = [0,0,255]
-        
-    # plt.imshow(noback_img)
+        # test_img[row,col] = 1
 
     img_color = noback_img.copy()
     img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
@@ -343,8 +344,8 @@ def get_F1(threshold=None, contour_thr=None,\
     pink = [] # predicted cell 중앙 좌표
     los = [] # size filter 에서 살아남는 contours 
     
-    for cnt in contours:
-        M = cv2.moments(cnt)
+    for i in range(len(contours)):
+        M = cv2.moments(contours[i])
         if M['m00'] >= contour_thr and  M['m00'] <= 500: 
             cx = int(M['m10']/M['m00'])
             cy = int(M['m01']/M['m00'])
@@ -916,7 +917,7 @@ print(cvlist)
 weight_savepath = mainpath + 'weightsave\\'; msFunction.createFolder(weight_savepath)
 
 cv = 0;
-lnn = 8
+lnn = 6
 weight_savepath = mainpath + 'weightsave_' + str(lnn) + '\\'; msFunction.createFolder(weight_savepath)
 
 
@@ -974,7 +975,7 @@ if False: # tmp 임시 model 생성용
 import sys; sys.exit()
 #%% model training
 
-for cv in range(0, len(cvlist)):
+for cv in range(0, 5): # len(cvlist)):
 # for cv in range(0, len(cvlist)):
     # 1. weight
     print('cv', cv)
@@ -1107,78 +1108,62 @@ for cv in range(len(cvlist)):
             rowmax = np.min([np.max(marker_y2) + 50, height-SIZE_HF])
             colmin = np.max([np.min(marker_x2) - 50, SIZE_HF])
             colmax = np.min([np.max(marker_x2) + 50, width-SIZE_HF])
-            # retangle_roi_dict = {'rowmin': rowmin, 'rowmax': rowmax, 'colmin': colmin, 'colmax': colmax}
             
-            # 아래 함수를 이용하여 GUI를 구성하세요.
-            # t_im = np.array(im_padding)
-            def ms_prep_and_predict(im_padding=None, sh=SIZE_HF, \
-                                    rowmin=None, rowmax=None, colmin=None, colmax=None, model=None, 
-                                    polygon=None, divnum=10):
-                
-                """
-                t_im = test할 image
-                sh = half size (14로 고정)
-                rowmin=None, rowmax=None, colmin=None, colmax=None
-                ->  image에 모든 영역을 test 하지않고, 일부분만 test하기 위한 변수들
-                    사용자가 직접 지정하거나, 사용자가 지정한 ROI를 기반으로 결정하면 될듯
-                
-                find_square = 사용자 정의함수 그대로 받음
-                model = keras 모델, 학습된 weight 까지 load 한다음 전달 할것
-                
-                polygon = test 할 image의 polygon
-                (polygon으로 rowmin, rowmax, colmin, olmax를 정하게 해도 될듯)
-                
-                divnum = memory 부족 문제 해결을 위해 몇번에 걸쳐 나눌건지
-                
-                """
-                from shapely.geometry import Point
-                import numpy as np
+            # from shapely.geometry import Point
+            # import numpy as np
+            import time; start = time.time()  # 시작 시간 저장
+            import ray
+            cpus = 12
+            ray.shutdown()
+            ray.init(num_cpus=cpus)
 
-                yhat_save = []
-                z_save = []
-                
-                forlist = list(range(rowmin, rowmax))
-                div = int(len(forlist)/divnum)
+            yhat_save = []
+            z_save = []
+            
+            forlist = list(range(rowmin, rowmax))
+            div = int(len(forlist)/divnum)
 
-                for div_i in range(divnum):
-                    print('div', div_i)
-                    if div_i != divnum-1: forlist_div = forlist[div_i*div : (div_i+1)*div]
-                    elif div_i== divnum-1: forlist_div = forlist[div_i*div :]
-                
-                    X_total_te = []
-                    Z_total_te = []
-                    for row in forlist_div:
-                        for col in range(colmin, colmax):
-                            if not(polygon is None):
-                                code = Point(col,row)
-                                if code.within(polygon):
-                                    crop = np.array(im_padding[row-SIZE_HF:row+SIZE_HF, col-SIZE_HF:col+SIZE_HF, :])
-                                    for ch in range(3):
-                                        crop[:,:,ch] = crop[:,:,ch]/np.mean(crop[:,:,ch])
-                                        # plt.imshow(crop[:,:,ch])
-                                        X_total_te.append(np.array(crop))
-                                        Z_total_te.append([row-SIZE_HF, col-SIZE_HF])
-                            else:
+            ##
+            
+            
+
+            ##
+        
+            for div_i in range(divnum):
+                print('div', div_i)
+                if div_i != divnum-1: forlist_div = forlist[div_i*div : (div_i+1)*div]
+                elif div_i== divnum-1: forlist_div = forlist[div_i*div :]
+            
+                X_total_te = []
+                Z_total_te = []
+                for row in forlist_div:
+                    for col in range(colmin, colmax):
+                        if not(polygon is None):
+                            code = Point(col,row)
+                            if code.within(polygon):
                                 crop = np.array(im_padding[row-SIZE_HF:row+SIZE_HF, col-SIZE_HF:col+SIZE_HF, :])
                                 for ch in range(3):
                                     crop[:,:,ch] = crop[:,:,ch]/np.mean(crop[:,:,ch])
+                                    # plt.imshow(crop[:,:,ch])
                                 X_total_te.append(np.array(crop))
                                 Z_total_te.append([row-SIZE_HF, col-SIZE_HF])
+                        else:
+                            crop = np.array(im_padding[row-SIZE_HF:row+SIZE_HF, col-SIZE_HF:col+SIZE_HF, :])
+                            for ch in range(3):
+                                crop[:,:,ch] = crop[:,:,ch]/np.mean(crop[:,:,ch])
+                            X_total_te.append(np.array(crop))
+                            Z_total_te.append([row-SIZE_HF, col-SIZE_HF])
+                    
+                if len(X_total_te) > 0: # polygon ROI 때문에 필요함
+                    X_total_te = np.array(X_total_te)
+                    yhat = model.predict(X_total_te, verbose=1, batch_size = 2**6)
+                    yhat_save += list(yhat[:,1])
+                    z_save += Z_total_te
                         
-                    if len(X_total_te) > 0: # polygon ROI 때문에 필요함
-                        X_total_te = np.array(X_total_te)
-                        yhat = model.predict(X_total_te, verbose=1, batch_size = 2**6)
-                        yhat_save += list(yhat[:,1])
-                        z_save += Z_total_te
-                            
-                z_save = np.array(z_save)
-                msdict = {'yhat_save': yhat_save, 'z_save': z_save}
-                plt.figure(); plt.imshow(im_padding)
-                return msdict
-            
-            msdict = ms_prep_and_predict(im_padding=im_padding, sh=SIZE_HF, \
-                                    rowmin=rowmin, rowmax=rowmax, colmin=colmin, colmax=colmax,\
-                                    model=model, polygon=polygon, divnum=10)   
+            z_save = np.array(z_save)
+            msdict = {'yhat_save': yhat_save, 'z_save': z_save}
+            plt.figure(); plt.imshow(im_padding)
+          
             print("time :", time.time() - start)  # 현재시각 - 시작시간 = 실행 시간
                 
             if not(os.path.isfile(psave)) or False:
@@ -1320,7 +1305,7 @@ for n_num in range(len(nlist_for)):
 
 # 20220910 여기까지 수정
 #%% to excel
-nlist_for = list(nlist2)
+nlist_for = list(nlist)
 mssave2 = []
 for n_num in range(len(nlist_for)):
     msid = nlist_for[n_num][15:-7]
@@ -1328,62 +1313,72 @@ for n_num in range(len(nlist_for)):
     
     # yhat_save, z_save
     psave = weight_savepath + 'sample_n_' + msid + '.pickle'
-    with open(psave, 'rb') as file:
-        msdict = pickle.load(file)
-        yhat_save = msdict['yhat_save']
-        z_save = msdict['z_save']
-    
-    # threshold, contour_thr
     psave2 = weight_savepath + 'F1_parameters_' + msid + '.pickle'
-    with open(psave2, 'rb') as file:
-        result = pickle.load(file)
+    
+    c1 = os.path.isfile(psave)
+    c2 = os.path.isfile(psave2)
+    
+    if c1 and c2:
+        with open(psave, 'rb') as file:
+            msdict = pickle.load(file)
+            yhat_save = msdict['yhat_save']
+            z_save = msdict['z_save']
         
-    threshold = result[2]
-    contour_thr = result[3]
-    # width = dictionary[msid]['width']
-    # height = dictionary[msid]['length']
-    t_im = dictionary[msid]['imread']
-    marker_x = dictionary[msid]['marker_x']
-    marker_y = dictionary[msid]['marker_y']
-    positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-    polygon = dictionary[msid]['polygon']
-    points = dictionary[msid]['points']
-    
-    #%
-    if False:
-        t_im2 = Image.fromarray((t_im).astype(np.uint8))
-        pts = np.array([points],  np.int32)
-        tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
-        plt.imshow(t_im)
-        plt.imshow(tmp)
-    #%
-    
-    F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
-               yhat_save=yhat_save, positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+        # threshold, contour_thr
         
-    predicted_cell_n = len(msdict['los'])
-    
-    tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
-    mssave2.append(tmp)
-    print()
-    print(tmp)
-    
-    if False:
-        plt.figure()
-        plt.subplot(2, 1, 1)
-        plt.title(msid + ' _truth_img')
-        plt.imshow(msdict['truth_img'])
-        plt.subplot(2, 1, 2)
-        plt.title('predcit_img')
-        plt.imshow(msdict['predcit_img'])
-        plt.tight_layout()
-        figsave_path = 'C:\\SynologyDrive\\study\\dy\\52\\figsave\\' + msid + '.png'
-        plt.savefig(figsave_path, dpi=200)
-        plt.close()
+        with open(psave2, 'rb') as file:
+            result = pickle.load(file)
+            
+        threshold = result[2]
+        contour_thr = result[3]
+        # width = dictionary[msid]['width']
+        # height = dictionary[msid]['length']
+        t_im = dictionary[msid]['imread']
+        marker_x = dictionary[msid]['marker_x']
+        marker_y = dictionary[msid]['marker_y']
+        positive_indexs = np.transpose(np.array([marker_y, marker_x]))
+        polygon = dictionary[msid]['polygon']
+        points = dictionary[msid]['points']
+        
+        #%
+        if False:
+            t_im2 = Image.fromarray((t_im).astype(np.uint8))
+            pts = np.array([points],  np.int32)
+            tmp = cv2.polylines(t_im, pts, True, (0,0,255),2)
+            plt.imshow(t_im)
+            plt.imshow(tmp)
+        #%
+        
+        F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
+                   yhat_save=yhat_save, positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+            
+        predicted_cell_n = len(msdict['los'])
+        
+        tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
+        mssave2.append(tmp)
+        print()
+        print(tmp)
+        
+        if False:
+            plt.figure()
+            plt.subplot(2, 1, 1)
+            plt.title(msid + ' _truth_img')
+            plt.imshow(msdict['truth_img'])
+            plt.subplot(2, 1, 2)
+            plt.title('predcit_img')
+            plt.imshow(msdict['predcit_img'])
+            plt.tight_layout()
+            figsave_path = 'C:\\SynologyDrive\\study\\dy\\52\\figsave\\' + msid + '.png'
+            plt.savefig(figsave_path, dpi=200)
+            plt.close()
     
 mssave2 = np.array(mssave2)
 print()
 print('F1 score mean', np.mean(np.array(mssave2[:,3], dtype=float)))
+
+a = np.array(mssave2[:,3], dtype=float)
+vix = np.where(a!=0)[0]
+np.mean(a[vix])
 
 #%% 20220609 - ROI 모두 지정 후 재평가
 # XYZ 없이, oldkey만 가지고 test result 불러 온 뒤, "optimize threshold, contour_thr" 만 진행 
