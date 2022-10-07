@@ -314,7 +314,6 @@ def get_F1(threshold=None, contour_thr=None,\
     
     return F1_score, msdict
 
-
 def get_F1(threshold=None, contour_thr=None,\
            yhat_save=None, z_save=None, t_im=None, positive_indexs=None, polygon=None):
 
@@ -335,6 +334,8 @@ def get_F1(threshold=None, contour_thr=None,\
         col = z_save[i][1]
         noback_img[row,col] = [0,0,255]
         # test_img[row,col] = 1
+        
+    # plt.imshow(test_img)
 
     img_color = noback_img.copy()
     img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
@@ -353,10 +354,10 @@ def get_F1(threshold=None, contour_thr=None,\
             if not(polygon is None):
                 if code.within(polygon):
                     pink.append((cx,cy))
-                    los.append(cnt)
+                    los.append(contours[i])
             else:
                 pink.append((cx,cy))
-                los.append(cnt)
+                los.append(contours[i])
 
     # predicted area 
     white = np.zeros((height,width,3))*np.nan
@@ -917,7 +918,7 @@ print(cvlist)
 weight_savepath = mainpath + 'weightsave\\'; msFunction.createFolder(weight_savepath)
 
 cv = 0;
-lnn = 6
+lnn = 7
 weight_savepath = mainpath + 'weightsave_' + str(lnn) + '\\'; msFunction.createFolder(weight_savepath)
 
 
@@ -1063,7 +1064,7 @@ if False: # tmp
             sylist.append(i)
             
 forlist3 = [0]
-for cv in range(len(cvlist)):
+for cv in range(5): # range(len(cvlist)):
     # common load
     print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_total_final.h5'
@@ -1287,7 +1288,16 @@ for n_num in range(len(nlist_for)):
             plt.imshow(msdict['truth_img'])
 
 # 20220910 여기까지 수정
+#%%
+
+csv_savepath = 'C:\\Temp\\20220919_dataset123_develop2\\merge_save.csv'
+df = pd.read_csv(csv_savepath)
+merge_save = np.array(df)[:,-1]
+
 #%% to excel
+# merge_save = []
+
+
 nlist_for = list(nlist)
 mssave2 = []
 for n_num in range(len(nlist_for)):
@@ -1301,7 +1311,7 @@ for n_num in range(len(nlist_for)):
     c1 = os.path.isfile(psave)
     c2 = os.path.isfile(psave2)
     
-    if c1 and c2:
+    if c1 and c2 and msid in merge_save:
         with open(psave, 'rb') as file:
             msdict = pickle.load(file)
             yhat_save = msdict['yhat_save']
@@ -1338,6 +1348,7 @@ for n_num in range(len(nlist_for)):
         predicted_cell_n = len(msdict['los'])
         
         tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
+        # merge_save.append(msid)
         mssave2.append(tmp)
         print()
         print(tmp)
