@@ -750,6 +750,7 @@ mainpath = 'C:\\Temp\\20220919_dataset123_develop2\\'
 msFunction.createFolder(mainpath)
 # mainpath = 'D:\\dy\\dy_THcelldetection\\XYZsave_20220913_original\\'
 
+n_num = 0
 for n_num in tqdm(range(len(keylist))):
     n = keylist[n_num]
     psave = mainpath + 'data_52_ms_XYZ_' + str(n) + '.pickle'
@@ -915,12 +916,18 @@ for cv in range(cvnum):
     cvlist.append(list(range(int(round(cv*divnum)), int(round((cv+1)*divnum)))))
 print(cvlist)
 
-weight_savepath = mainpath + 'weightsave\\'; msFunction.createFolder(weight_savepath)
-
 cv = 0;
 lnn = 7
+repeat = 1
+# weight_savepath = mainpath + 'weightsave_' + str(lnn) + \
+#     '_' + str(repeat) + '\\'; msFunction.createFolder(weight_savepath)
+    
 weight_savepath = mainpath + 'weightsave_' + str(lnn) + '\\'; msFunction.createFolder(weight_savepath)
 
+if False:
+    df = pd.DataFrame(nlist)
+    df = pd.concat((df, pd.DataFrame(cvlist)))
+    df.to_csv('C:\\Temp\\20220919_dataset123_develop2\\nlist.csv')          
 
 #%% dataset2
 
@@ -974,6 +981,171 @@ if False: # tmp 임시 model 생성용
     print('save done')
 
 import sys; sys.exit()
+
+#%% log plot
+# import keras
+# class BCP(keras.callbacks.Callback):
+#     batch_f1_score = [] # accuracy at given batch
+#     batch_loss = [] # loss at given batch    
+#     def __init__(self):
+#         super(BCP,self).__init__() 
+#     def on_train_batch_end(self, batch, logs=None):                
+#         BCP.batch_f1_score.append(logs.get('f1_score'))
+#         BCP.batch_loss.append(logs.get('loss'))
+#         # print(logs)
+
+# cvnum = 5
+psave = weight_savepath + 'BCP_save.pickle'
+if os.path.isfile(psave):
+    print('load psave')
+    with open(psave, 'rb') as file:
+        BCP_save = pickle.load(file)
+else:
+    BCP_save = msFunction.msarray([cvnum, 4])
+
+
+lowlist1 = ['C2_1R', 's210302_2R', 's210405_4R', 's210302_4L', 's210225_1R']
+lowlist2 = ['C2_2R', 's210225_3L', 's210302_3R', 's210226_3R', 's210226_3L']
+len(list(set(lowlist1+lowlist2)))
+
+nlist_idonly = []
+for i in range(len(nlist)):
+    nlist_idonly.append(nlist[i][15:-7])
+    
+cvtmp1 = []
+for i in lowlist1:
+    cvtmp1.append(np.where(np.array(nlist_idonly)==i)[0][0])
+cvtmp2 = []
+for i in lowlist2:
+    cvtmp2.append(np.where(np.array(nlist_idonly)==i)[0][0])   
+
+
+
+cvlist_tmp = [[],[],[],[],[], cvtmp1, cvtmp2]
+
+cv = 0
+for cv in range(0, len(cvlist_tmp)): # len(cvlist)):
+    if len(BCP_save[cv][0]) == 0:
+        tlist = list(range(len(nlist)))
+        telist = cvlist_tmp[cv]
+        trlist = list(set(tlist) - set(telist))
+
+        print(cv, telist)
+
+        X_te, Y_te, Z_te = [], [] ,[]
+        for te in telist:
+            gc.collect(); tf.keras.backend.clear_session()
+            psave = xyz_loadpath + nlist[te]
+            with open(psave, 'rb') as file:
+                msdict = pickle.load(file)
+                X_te += msdict['X']
+                Y_te += msdict['Y']
+                Z_te += msdict['Z']
+        X_te = np.array(X_te); Y_te = np.array(Y_te); Z_te = np.array(Z_te)
+        print(X_te.shape); print(Y_te.shape); print(np.mean(X_te[0]))
+        
+        
+        model = model_setup(xs=(28, 28, 3), ys=2, lnn=lnn)
+        if cv==0: print(model.summary())
+
+        epochs=4; cnt=0
+        for epoch in range(epochs):
+            for n_num in trlist:
+                gc.collect(); tf.keras.backend.clear_session()
+                psave = xyz_loadpath + nlist[n_num]
+                with open(psave, 'rb') as file:
+                    msdict = pickle.load(file)
+                    X_tmp = np.array(msdict['X'])
+                    Y_tmp = np.array(msdict['Y'])
+                    Z_tmp = msdict['Z']
+                    
+                print(n_num, X_tmp.shape, np.mean(Y_tmp, axis=0))
+                hist = model.fit(X_tmp, Y_tmp, epochs=1, verbose=1, batch_size = 2**6)
+
+                BCP_save[cv][0].append(hist.history['loss'])
+                BCP_save[cv][1].append(hist.history['f1_score'])
+                
+                hist_te = model.evaluate(X_te, Y_te)
+                
+                BCP_save[cv][2].append(hist_te[0])
+                BCP_save[cv][3].append(hist_te[1][0])
+                # 동기화 해야함
+                    
+
+with open(psave, 'wb') as f:
+    pickle.dump(BCP_save, f, pickle.HIGHEST_PROTOCOL)
+    print(psave, '저장되었습니다')
+            
+#%%
+# cv 누적하고, cv끼리 평균 + errorbar로 그래프 완성
+mssave7 = msFunction.msarray([4])
+for cv in range(7):
+    if cv == 4: continue
+    tn = len(BCP_save[cv][0])
+    mean_recal_loss = np.zeros(tn) * np.nan
+    mean_recal_f1 = np.zeros(tn) * np.nan
+    
+    forlist = list(range(0, tn, int(tn/epochs)))
+    forlist += [tn]
+    f = forlist[0]
+    for i2 in range(len(forlist[:-1])):
+        for i in range(forlist[i2], forlist[i2+1]):
+            # print(forlist[i2], i)
+            mean_recal_loss[i] = np.mean(BCP_save[cv][0][forlist[i2]:i+1])
+            mean_recal_f1[i] = np.mean(BCP_save[cv][1][forlist[i2]:i+1])
+
+    mssave7[0].append(mean_recal_loss[:364])
+    mssave7[1].append(BCP_save[cv][2][:364])
+    
+    mssave7[2].append(mean_recal_f1[:364])
+    mssave7[3].append(BCP_save[cv][3][:364])
+    
+plt.figure()
+plt.plot(np.mean(np.array(mssave7[0]), axis=0))
+plt.plot(np.mean(np.array(mssave7[1]), axis=0))
+
+plt.figure()
+plt.plot(np.mean(np.array(mssave7[2]), axis=0))
+plt.plot(np.mean(np.array(mssave7[3]), axis=0))
+
+import scipy.stats as stats
+plt.figure()
+msplot = np.array(mssave7[0])
+msplot_mean = np.nanmean(msplot, axis=0)
+e = stats.sem(msplot, axis=0, nan_policy='omit')
+xaxis = range(len(msplot_mean))
+plt.plot(xaxis, msplot_mean, label='Training set')
+plt.fill_between(xaxis, msplot_mean+e, msplot_mean-e, alpha=0.5)
+
+msplot = np.array(mssave7[1])
+msplot_mean = np.nanmean(msplot, axis=0)
+e = stats.sem(msplot, axis=0, nan_policy='omit')
+xaxis = range(len(msplot_mean))
+plt.plot(xaxis, msplot_mean, label='Test set')
+plt.fill_between(xaxis, msplot_mean+e, msplot_mean-e, alpha=0.5)
+
+plt.xlabel('Batchs')
+plt.ylabel('Loss')
+plt.legend()
+
+figsavepath = 'C:\\SynologyDrive\\study\\dy\\Frontiers in Neuroanatomy\\revision_files\\'
+plt.savefig(figsavepath, dpi=200)
+
+#%% 숫자 체크
+mssave_num = []
+for n_num in trlist:
+    gc.collect(); tf.keras.backend.clear_session()
+    psave = xyz_loadpath + nlist[n_num]
+    with open(psave, 'rb') as file:
+        msdict = pickle.load(file)
+        X_tmp = np.array(msdict['X'])
+        Y_tmp = np.array(msdict['Y'])
+        Z_tmp = msdict['Z']
+
+    mssave_num.append([n_num] + list(np.sum(Y_tmp, axis=0)))
+
+
+np.round(np.mean(np.array(mssave_num)[:,1:], axis=0) * (len(nlist) - 5))
 #%% model training
 
 for cv in range(0, 5): # len(cvlist)):
@@ -987,12 +1159,7 @@ for cv in range(0, 5): # len(cvlist)):
         tlist = list(range(len(nlist)))
         telist = cvlist[cv]
         trlist = list(set(tlist) - set(telist))
-        
-        # trlist = tlist
-        # telist = [0]
-        # trlist = list(set(tlist) - set(telist))
-        # 
-        
+
         X_te, Y_te, Z_te = [], [] ,[]
         for te in telist:
             gc.collect(); tf.keras.backend.clear_session()
@@ -1016,6 +1183,8 @@ for cv in range(0, 5): # len(cvlist)):
         epochs = 4; cnt=0
         for epoch in range(epochs):
             for n_num in trlist:
+                import time; start = time.time()
+                
                 gc.collect(); tf.keras.backend.clear_session()
                 psave = xyz_loadpath + nlist[n_num]
                 with open(psave, 'rb') as file:
@@ -1024,8 +1193,11 @@ for cv in range(0, 5): # len(cvlist)):
                     Y_tmp = np.array(msdict['Y'])
                     Z_tmp = msdict['Z']
                     
-                print(n_num, X_tmp.shape, np.mean(Y_tmp, axis=0))
+                print(n_num, X_tmp.shape, np.mean(Y_tmp, axis=0), np.sum(Y_tmp, axis=0))
+                
                 hist = model.fit(X_tmp, Y_tmp, epochs=1, verbose=1, batch_size = 2**6)
+                print("time :", time.time() - start)
+                
                 cnt+=1
                 if cnt == 20 and False:
                     cell = np.where(Y_tmp[:,1]==1)[0]
@@ -1293,10 +1465,9 @@ for n_num in range(len(nlist_for)):
 csv_savepath = 'C:\\Temp\\20220919_dataset123_develop2\\merge_save.csv'
 df = pd.read_csv(csv_savepath)
 merge_save = np.array(df)[:,-1]
-
+print('len(merge_save)', len(merge_save))
 #%% to excel
 # merge_save = []
-
 
 nlist_for = list(nlist)
 mssave2 = []
@@ -1311,7 +1482,8 @@ for n_num in range(len(nlist_for)):
     c1 = os.path.isfile(psave)
     c2 = os.path.isfile(psave2)
     
-    if c1 and c2 and msid in merge_save:
+    if c1 and c2 and (msid in merge_save):
+        print(msid)
         with open(psave, 'rb') as file:
             msdict = pickle.load(file)
             yhat_save = msdict['yhat_save']
