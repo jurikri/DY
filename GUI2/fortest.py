@@ -8,105 +8,15 @@ Created on Fri Nov  4 16:37:12 2022
 #%%
 import numpy as np
 import cv2
-# img = np.array(im2)
-def get_contrast(img):
-    import numpy as np
-    from scipy.stats import mode
-    
-    
-    pc = np.array(img)
-    pc = (pc).astype(np.uint8)
-    pc = cv2.cvtColor(pc, cv2.COLOR_BGR2RGB)
-    pc = cv2.cvtColor(pc, cv2.COLOR_BGR2GRAY)
-    std = np.std(pc)
-    c=  min(mode(pc)[0][0])
-    u = pc - c
-    u = u**2
-    a = np.sum(u)
-    a = a / (len(pc)*len(pc[0]))
-    a = np.sqrt(a)
-    b = np.mean(pc)
-    c = min(mode(pc)[0][0])
-    return a, b ,c, std
-
-#%%
-
-from PIL import Image,ImageEnhance
-
-# path2 = path1 + flist2[i]
-# im2 = Image.open(path2)
-# en = ImageEnhance.Brightness(im2).enhance(0.1+oo)
-
-# self.progressBar.setValue(20)
-# QtWidgets.QApplication.processEvents()
-# self.label_status2.setText('Processing ... Please wait')
-# self.label_status2.repaint()
-# print('(adjusting brightness and constrast automatically...)')
-# nn = []
-# t = []
-# s = []
-# l = []
-#brightness (mean)
-oo = 0
-for i in range(0, 50):
-#Display image  
-    print(i, oo)
-    path2 = 'K:\\SynologyDrive\\study\\dy\\박하늬선생님_1103\\L-dopa\\C1.1L.JPG'
-    im = Image.open(path2)
-    en = ImageEnhance.Brightness(im).enhance(0.1+oo)
-    if (253 > get_contrast(en)[1] > 241):
-        break
-    else:
-        oo += 0.1
-
-# self.progressBar.setValue(60)
-# QtWidgets.QApplication.processEvents()
-# # contrast (sig)
-ii = 0
-for i in range(50):
-    print(i, ii)
-    enh = ImageEnhance.Contrast(en).enhance(0.2+ii)
-    if 36 < get_contrast(enh)[3] < 43:
-        break
-    elif get_contrast(enh)[3] > 43:
-        break
-    else:
-        ii += 0.1
-        
-print('done')
-
-# self.progressBar.setValue(100)
-# QtWidgets.QApplication.processEvents()
-# time.sleep(1)
-# self.progressBar.setValue(0)
-
-ad_img = np.array(enh)    
-e = cv2.cvtColor(ad_img,cv2.COLOR_BGR2RGB)
-
-
-
-#%%
 import os
 import matplotlib.image as img
-
-path1 = 'K:\\SynologyDrive\\study\\dy\\박하늬선생님_1103\\L-dopa\\'
-flist = os.listdir(path1); flist2=[]
-for i in range(len(flist)):
-     if os.path.splitext(flist[i])[1] == '.JPG':
-         flist2.append(flist[i])
-
-for i in range(len(flist2)):
-    im = img.imread(path1 + flist2[i])
 import matplotlib.pyplot as plt
-plt.imshow(im)
+from PIL import Image, ImageEnhance
+from scipy.stats import mode
+from tqdm import tqdm
+import pickle
+from scipy.stats import mode
 
-plt.figsave()
-#%% img load 후 contrast / brightness 조절
-
-
-
-
-# im (조절전) -> im_fix (조절후)
 #%% keras model load
 
 lnn = 7
@@ -158,18 +68,44 @@ weight_path = 'merge_20221017.h5'
 model.load_weights(weight_path)
 
 #%%
+def get_contrast(img):
+    
+    pc = np.array(img)
+    pc = (pc).astype(np.uint8)
+    pc = cv2.cvtColor(pc, cv2.COLOR_BGR2RGB)
+    pc = cv2.cvtColor(pc, cv2.COLOR_BGR2GRAY)
+    std = np.std(pc)
+    c=  min(mode(pc)[0][0])
+    u = pc - c
+    u = u**2
+    a = np.sum(u)
+    a = a / (len(pc)*len(pc[0]))
+    a = np.sqrt(a)
+    b = np.mean(pc)
+    c = min(mode(pc)[0][0])
+    return a, b ,c, std
 
-im = img.imread(path1 + 'C1.1L.JPG')
-im = img.imread(path1 + 'C1.1L_modify.JPG')
+def aotu_preprocessing(imgpath, get_contrast=get_contrast):
+    print('start preprocessing')
+    im = Image.open(imgpath)
+    im_copy = im.convert("RGB")
 
-#%%
-
-#%% # 2. test data prep
-from tqdm import tqdm
-import pickle
-
-#   import numpy as np
-#   t_im = np.array(im); roiinfo=None
+    oo = 0
+    for i in range(0, 50):
+        en = ImageEnhance.Brightness(im_copy).enhance(0.1+oo)
+        if (253 > get_contrast(en)[1] > 241): break
+        else: oo += 0.1
+      
+    ii = 0
+    for i in range(50):
+        # print(i, ii)
+        enh = ImageEnhance.Contrast(en).enhance(0.2+ii)
+        if 36 < get_contrast(enh)[3] < 43: break
+        elif get_contrast(enh)[3] > 43: break
+        else: ii += 0.1
+        
+    print('done')
+    return enh
 
 def ms_testprep(t_im=None, roiinfo=None, filename=None):
     import numpy as np
@@ -192,14 +128,14 @@ def ms_testprep(t_im=None, roiinfo=None, filename=None):
     forlist = list(range(rowmin, rowmax))
     div = int(len(forlist)/divnum)
     #   div_i = 0
-    for div_i in range(divnum):
+    for div_i in tqdm(range(divnum)):
         print('div', div_i)
         if div_i != divnum-1: forlist_div = forlist[div_i*div : (div_i+1)*div]
         elif div_i== divnum-1: forlist_div = forlist[div_i*div :]
     
         X_total_te = []
         Z_total_te = []
-        for row in tqdm(forlist_div):
+        for row in forlist_div:
             for col in range(colmin, colmax):
                 if not(polygon is None):
                     code = Point(col,row)
@@ -219,11 +155,11 @@ def ms_testprep(t_im=None, roiinfo=None, filename=None):
                         Z_total_te.append([row-SIZE_HF, col-SIZE_HF])
             
         X_total_te = np.array(X_total_te)
-        print(np.mean(np.std(X_total_te,0)))
+        # print(np.mean(np.std(X_total_te,0)))
             
         if len(X_total_te) > 0: # polygon ROI 때문에 필요함
             X_total_te = np.array(X_total_te)
-            yhat = model.predict(X_total_te, verbose=1, batch_size = 2**6)
+            yhat = model.predict(X_total_te, verbose=0, batch_size = 2**6)
             yhat_save += list(yhat[:,1])
             z_save += Z_total_te
                 
@@ -236,8 +172,33 @@ def ms_testprep(t_im=None, roiinfo=None, filename=None):
         with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
             pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
             print(psave, '저장되었습니다.')
+            
+#%%
 
-ms_testprep(t_im=None, roiinfo=None)
+path1 = 'C:\\SynologyDrive\\study\\dy\\박하늬선생님_1103\\L-dopa\\'
+flist = os.listdir(path1); flist2=[]
+for i in range(len(flist)):
+     if os.path.splitext(flist[i])[1] == '.JPG':
+         flist2.append(flist[i])
+
+#   i=0
+for i in range(len(flist2)):
+    imgpath = path1 + flist2[i]
+    
+    filename = os.path.splitext(flist2[i])[0] + '_tsave.pickle'
+    if not os.path.isfile(filename):
+        img_enh = aotu_preprocessing(imgpath)
+        img_enh_array = np.array(img_enh)
+        ms_testprep(t_im=img_enh_array, roiinfo=None, filename=filename)
+    
+#%% # 2. test data prep
+
+
+#   import numpy as np
+#   t_im = np.array(im); roiinfo=None
+
+
+
 
 
 
