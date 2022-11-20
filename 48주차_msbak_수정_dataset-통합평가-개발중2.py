@@ -512,8 +512,8 @@ def get_F1(threshold=None, contour_thr=None,\
             white2[np.max([row-boxsize, 0]) : np.min([row+boxsize, height]), \
                    np.max([col-boxsize, 0]) : np.min([col+boxsize, width])] = 0
         return white2
-    
-    dots = pink
+
+    dots = list(pink)
     white2 = dot_expand(height=height, width=width, dots=dots)
     predict_area = []
     w = np.where(white2[:,:,0]==0)
@@ -531,19 +531,40 @@ def get_F1(threshold=None, contour_thr=None,\
                 co.append((int(col),int(row)))
         else: co.append((int(col),int(row)))
         
-    Cell_n = len(co)
-    Predict_n = len(pink)
-    TP = Cell_n - len(list(set(co) - set(predict_area)))
-    FP = Predict_n - TP
-    FN = Cell_n - TP
+    if True:
+            # TN
+        dots = list(co)
+        ansbox_p = dot_expand(height=height, width=width, dots=dots)
+        ansbox = np.array(ansbox_p[:,:,0])
+        predbox = np.array(white2[:,:,0])
+        predbox2 = np.zeros(predbox.shape)
+        predbox2[np.where(predbox==0)] = 255
+        
+        # plt.imshow(predbox2)
+        # plt.imshow(ansbox)
+        # plt.imshow(ansbox - predbox2)
+        ansbox3 = ((ansbox - predbox2) == 255)
+        # plt.imshow(ansbox3)
+        TN = np.sum(ansbox3)
+    
+        Cell_n = len(co)
+        Predict_n = len(pink)
+        TP = Cell_n - len(list(set(co) - set(predict_area)))
+        FP = Predict_n - TP
+        FN = Cell_n - TP
     
     try:
         precision = TP/(TP+FP)
         recall = TP/(TP+FN)
         F1_score = 2 * precision * recall / (precision + recall)
-    except: F1_score = 0
+        # acc = (TP + TN) / (TP + TN + FP + FN)
+    except: F1_score = 0; #  acc = 0
     
-    msdict = {'los': los, 'co': co, 'tp': TP, 'fp': FP, 'fn': FN}
+    # plt.imshow(predbox2)
+    # plt.imshow(ansbox)
+    
+    msdict = {'los': los, 'co': co, 'tp': TP, 'fp': FP, 'fn': FN, \
+              'predbox2': predbox2, 'ansbox': ansbox}
     
     return F1_score, msdict
 
@@ -553,7 +574,7 @@ def get_F1(threshold=None, contour_thr=None,\
 import tensorflow_addons as tfa
 metric = tfa.metrics.F1Score(num_classes=2, threshold=0.5)
 
-def model_setup(xs=None, ys=None, lr=1e-4, lnn=8):
+def model_setup(xs=None, ys=None, lr=1e-4, lnn=7):
     from tensorflow.keras.optimizers import Adam
     model = models.Sequential()
     model.add(layers.Conv2D(2**lnn, (4, 4), activation='relu', input_shape=xs))
@@ -583,7 +604,7 @@ def model_setup(xs=None, ys=None, lr=1e-4, lnn=8):
     
     return model
 
-model = model_setup(xs=(29,29,1), ys=(2))
+model = model_setup(xs=(29,29,3), ys=(2), lnn=7)
 print(model.summary())
 
 #%%
@@ -964,7 +985,7 @@ if True:
     nlist = []
     for i in range(len(flist)):
         nlist.append(os.path.splitext(flist[i])[0])
-    nlist = list(set(nlist))
+    nlist = list(set(nlist)); nlist.sort()
     
     # XYZ gen
     for n_num in tqdm(range(len(nlist))):
@@ -1030,6 +1051,7 @@ def datafile_find(xyz_loadpath):
 dataset1 = list(datafile_find(mainpath))
 dataset2 = list(datafile_find(mainpath_dataset2))
 dataset3 = list(datafile_find(mainpath_dataset3))
+dataset3.sort()
 nlist = datafile_find(mainpath) + dataset2 + dataset3
     
 print(len(datafile_find(mainpath)), len(dataset2), len(dataset3))
@@ -1051,8 +1073,9 @@ def path_find(N, dataset1=dataset1, dataset2=dataset2, dataset3=dataset3):
 for cv in range(len(cvlist)):
 # for cv in range(0, len(cvlist)):
     # 1. weight
-    print('cv', cv)
+    
     msid = str(dataset3[cv][15:-7])
+    print('cv', cv, msid)
     weight_savename = 'cv_msid_' + msid + '_total_final.h5'
     
     final_weightsave = weight_savepath + weight_savename
@@ -1126,9 +1149,9 @@ for cv in range(len(cvlist)):
                     
             print('---evaluate---')
             model.evaluate(X_te, Y_te, verbose=1, batch_size = 2**6)
-            model.save_weights(final_weightsave)
             gc.collect()
             tf.keras.backend.clear_session()
+        model.save_weights(final_weightsave)
 
 #%% test for dataset3
 
@@ -1136,37 +1159,21 @@ for cv in range(len(cvlist)):
 # for cv in range(0, len(cvlist)):
     # 1. weight
     print('cv', cv)
-    weight_savename = 'cv_' + str(cv) + '_total_final.h5'
+    msid = str(dataset3[cv][15:-7])
+    weight_savename = 'cv_msid_' + msid + '_total_final.h5'
     final_weightsave = weight_savepath + weight_savename
-
-    if not(os.path.isfile(final_weightsave)) or False:
-        tlist = list(range(len(nlist)))
-        telist = np.where(np.array(nlist) == cvlist[cv])[0]
-        trlist = list(set(tlist) - set(telist))
-
-        X_te, Y_te, Z_te = [], [] ,[]
-        for te in telist:
-            gc.collect(); tf.keras.backend.clear_session()
-            xyz_loadpath = path_find(te)
-            psave = xyz_loadpath + nlist[te]
-            with open(psave, 'rb') as file:
-                msdict = pickle.load(file)
-                X_te += msdict['X']
-                Y_te += msdict['Y']
-                Z_te += msdict['Z']
-        X_te = np.array(X_te); Y_te = np.array(Y_te); Z_te = np.array(Z_te)
-        print(X_te.shape); print(Y_te.shape); print(np.mean(X_te[0]))
-        
-        test_image_no = cvlist[cv][15:-7]
-        psave = weight_savepath + 'sample_n_' + test_image_no + '.pickle'
-
-        t_im = dictionary[test_image_no]['imread']
+    
+    if os.path.isfile(final_weightsave):
+    
+        print(msid)
+        psave = weight_savepath + 'sample_n_' + msid + '.pickle'
+        t_im = dictionary[msid]['imread']
         # t_im = np.mean(t_im, axis=2)
-        marker_x = dictionary[test_image_no]['marker_x']
-        marker_y = dictionary[test_image_no]['marker_y']
+        marker_x = dictionary[msid]['marker_x']
+        marker_y = dictionary[msid]['marker_y']
         positive_indexs = np.transpose(np.array([marker_y, marker_x]))
-        polygon = dictionary[test_image_no]['polygon']
-        points = dictionary[test_image_no]['points']
+        polygon = dictionary[msid]['polygon']
+        points = dictionary[msid]['points']
     
         im = np.array(t_im)
         im_padding = np.ones((im.shape[0]+SIZE_HF*2, im.shape[1]+SIZE_HF*2, 3)) * 255
@@ -1265,6 +1272,8 @@ for cv in range(cvnum):
     cvlist.append(list(range(int(round(cv*divnum)), int(round((cv+1)*divnum)))))
 print(cvlist)
 
+#%%
+
 cv = 0;
 lnn = 7
 repeat = 1
@@ -1306,7 +1315,7 @@ if False:
     print(X_te.shape); print(Y_te.shape); print(np.mean(X_te[0]))
 
 if False: # tmp 임시 model 생성용
-    weight_savename = 'merge_20221017.h5'
+    weight_savename = 'merge_20221118.h5'
     final_weightsave = weight_savepath + weight_savename
     
     model = model_setup(xs=(28, 28, 3), ys=2, lnn=7)
@@ -1318,6 +1327,8 @@ if False: # tmp 임시 model 생성용
         for n_num in range(len(nlist)):
             gc.collect(); tf.keras.backend.clear_session()
             psave = xyz_loadpath + nlist[n_num]
+            if not(os.path.isfile(psave)): psave = xyz_loadpath + 'dataset2_SORA\\' +  nlist[n_num]
+            if not(os.path.isfile(psave)): psave = xyz_loadpath + 'dataset2_sy\\' +  nlist[n_num]
             with open(psave, 'rb') as file:
                 msdict = pickle.load(file)
                 X_tmp = np.array(msdict['X'])
@@ -1529,7 +1540,7 @@ for cv in range(0, 5): # len(cvlist)):
                 plt.figure()
                 plt.imshow(X_te[ms])
         
-        model = model_setup(xs=(28, 28, 3), ys=2, lnn=lnn)
+        model = model_setup(xs=(29, 29, 3), ys=2, lnn=lnn)
         if cv==0: print(model.summary())
         
         epochs = 4; cnt=0
@@ -2003,6 +2014,7 @@ def F1_score_optimization(nlist=None, dictionary=dictionary, get_F1=get_F1):
     for n_num in range(len(nlist_for)):
         print('F1 score optimization', n_num)
         test_image_no = nlist_for[n_num][15:-7]
+        # test_image_no = '5.tif_resize_crop'
         psave = weight_savepath + 'sample_n_' + str(test_image_no) + '.pickle'
         psave_f1parameters = weight_savepath + 'F1_parameters_' + str(test_image_no) + '.pickle'
         
@@ -2121,9 +2133,10 @@ def F1_score_optimization(nlist=None, dictionary=dictionary, get_F1=get_F1):
                 
             predicted_cell_n = len(msdict['los'])
             
-            tmp = [test_image_no, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
+            tmp = [test_image_no, len(msdict['co']), predicted_cell_n, F1_score, \
+                   msdict['tp'], msdict['fp'], msdict['fn'], msdict['predbox2'], msdict['ansbox']]
             mssave9.append(tmp)
-            print('reports >', tmp)
+            print('reports >', tmp[:-2])
             
     return mssave9
 
@@ -2140,11 +2153,20 @@ mssave2 = np.array(mssave2)
 print()
 print('F1 score mean', np.mean(np.array(mssave2[:,3], dtype=float)))
 
-mssave2 = F1_score_optimization(nlist=[dataset3[0]], dictionary=dictionary)
-mssave2 = np.array(mssave2)
+mssave2 = F1_score_optimization(nlist=dataset3, dictionary=dictionary)
+mssave3 = np.array(mssave2)[:,:-2]
+len(mssave3)
 print()
-print('F1 score mean', np.mean(np.array(mssave2[:,3], dtype=float)))
+tmp = np.array(mssave3[:,3], dtype=float)
+vix = np.where(tmp > 0.54)[0]
+print('F1 score mean', np.mean(tmp[vix]))
 
+#%%
+
+ix = 4
+mssave2[ix][0]
+plt.imshow(mssave2[ix][-2])
+plt.imshow(mssave2[ix][-1])
 
 
 
