@@ -5,6 +5,8 @@ Created on Wed May 25 16:07:08 2022
 @author: PC
 """
 
+#%%
+
 import tensorflow as tf
 # config = tf.compat.v1.ConfigProto()
 # config.gpu_options.allow_growth = True
@@ -28,6 +30,15 @@ import sys;
 sys.path.append('D:\\mscore\\code_lab\\')
 sys.path.append('C:\\mscode')
 import msFunction
+
+
+#%%
+from tensorflow.python.client import device_lib
+print(device_lib.list_local_devices())
+print(sys.version)
+print(tf.__version__)
+#  nvcc -V <- Cuda version check in CMD
+#  V11.4.48
 
 #%% rawdata_dict gen
 mainpath = 'C:\\SynologyDrive\\study\\dy\\image_data\\processed_imgs\\'
@@ -269,41 +280,6 @@ def get_F1(threshold=None, contour_thr=None,\
 import tensorflow_addons as tfa
 metric = tfa.metrics.F1Score(num_classes=2, threshold=0.5)
 
-# def model_setup(xs=None, ys=None, lr=1e-4, lnn=7):
-#     from tensorflow.keras.optimizers import Adam
-#     model = models.Sequential()
-#     model.add(layers.Conv2D(2**lnn, (4, 4), activation='relu', input_shape=xs))
-#     model.add(layers.MaxPooling2D((2, 2)))
-    
-#     model.add(layers.Conv2D(2**lnn, (3, 3), activation='relu'))
-#     model.add(layers.MaxPooling2D((2, 2)))
-    
-#     model.add(layers.Conv2D(2**lnn, (2, 2), activation='relu'))
-#     model.add(layers.MaxPooling2D((2, 2)))
-
-#     lnn2 = lnn-1
-#     lnn3 = lnn-2
-    
-#     model.add(layers.Flatten())
-#     model.add(layers.Dense(2**lnn2, activation='relu' ))
-#     model.add(layers.Dense(2**lnn2, activation='relu' ))
-#     model.add(layers.Dense(2**lnn2, activation='relu' ))
-#     model.add(layers.Dense(2**lnn3, activation='relu' ))
-#     model.add(layers.Dense(2**lnn3, activation='relu' ))
-#     model.add(layers.Dense(2**lnn3, activation='relu' ))
-#     model.add(layers.Dense(2**lnn3, activation='sigmoid') )
-#     model.add(layers.Dense(ys, activation='softmax'))
-
-#     model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
-#                   loss='categorical_crossentropy', metrics=metric) 
-    
-#     return model
-
-# model = model_setup(xs=(29,29,3), ys=(2), lnn=7)
-# print(model.summary())
-
-#%%
-
 from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications.vgg16 import preprocess_input
@@ -312,7 +288,7 @@ ys=2
 def model_setup(xs=None, ys=None, lr=1e-4, lnn=7):
     from tensorflow.keras.optimizers import Adam
     model = models.Sequential()
-    model.add(VGG16(include_top=False, input_shape=xs))
+    model.add(VGG16(include_top=False, input_shape=xs, weights='imagenet'))
     
     lnn2 = lnn-1
     lnn3 = lnn-2
@@ -327,7 +303,7 @@ def model_setup(xs=None, ys=None, lr=1e-4, lnn=7):
     model.add(layers.Dense(2**lnn3, activation='sigmoid') )
     model.add(layers.Dense(ys, activation='softmax'))
     
-    model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
+    model.compile(optimizer=Adam(learning_rate=lr, beta_1=0.9, beta_2=0.999), \
                        loss='categorical_crossentropy', metrics=metric) 
     return  model
 
@@ -634,7 +610,7 @@ print(cvlist)
 #%%
 
 cv = 0;
-lnn = 7
+lnn = 8
 repeat = 1
 # weight_savepath = mainpath + 'weightsave_' + str(lnn) + \
 #     '_' + str(repeat) + '\\'; msFunction.createFolder(weight_savepath)
@@ -665,16 +641,16 @@ for cv in range(0, len(cvlist)):
         telist_name = []
         X_te, Y_te, Z_te = [], [] ,[]
         for te in telist:
-            gc.collect(); tf.keras.backend.clear_session()
-            psave = xyz_loadpath + nlist[te]
+            # gc.collect(); tf.keras.backend.clear_session()
+            # psave = xyz_loadpath + nlist[te]
             telist_name.append(nlist[te])
-            with open(psave, 'rb') as file:
-                msdict = pickle.load(file)
-                X_te += msdict['X']
-                Y_te += msdict['Y']
-                Z_te += msdict['Z']
-        X_te = np.array(X_te); Y_te = np.array(Y_te); Z_te = np.array(Z_te)
-        print(X_te.shape); print(Y_te.shape); print(np.mean(X_te[0]))
+        #     with open(psave, 'rb') as file:
+        #         msdict = pickle.load(file)
+        #         X_te += msdict['X']
+        #         Y_te += msdict['Y']
+        #         Z_te += msdict['Z']
+        # X_te = np.array(X_te); Y_te = np.array(Y_te); Z_te = np.array(Z_te)
+        # print(X_te.shape); print(Y_te.shape); print(np.mean(X_te[0]))
         
         psave_telist_name = weight_savepath + 'cv_' + str(cv) + '_cvlist.pickle'
         with open(psave_telist_name, 'wb') as f:  # Python 3: open(..., 'rb')
@@ -708,9 +684,10 @@ for cv in range(0, len(cvlist)):
                 hist = model.fit(X_tmp, Y_tmp, epochs=1, verbose=1, batch_size = 2**6)
                 print("time :", time.time() - start)
                 
-                cnt+=1
-                if cnt % 5 == 0:
-                    model.evaluate(X_te, Y_te, verbose=1, batch_size = 2**6)
+                # cnt+=1
+                # if cnt % 20 == 0:
+                #     print('eval')
+                #     model.evaluate(X_te, Y_te, verbose=1, batch_size = 2**6)
                 
                 if cnt == 20 and False:
                     model.evaluate(X_te, Y_te, verbose=1, batch_size = 2**6)
