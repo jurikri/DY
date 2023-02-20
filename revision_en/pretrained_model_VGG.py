@@ -1011,7 +1011,7 @@ for n_num in range(len(nlist_for)):
             
         predicted_cell_n = len(msdict['los'])
         
-        tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn']]
+        tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn'], threshold, contour_thr]
         # merge_save.append(msid)
         mssave2.append(tmp)
         print()
@@ -1039,7 +1039,7 @@ vix = np.where(a!=0)[0]
 np.mean(a[vix])
 
 excel_save = weight_savepath + 'F1score_result.xls'
-mssave2_df = pd.DataFrame(mssave2, columns=['ID', 'Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN'])
+mssave2_df = pd.DataFrame(mssave2, columns=['ID', 'Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'])
 mssave2_df.to_excel(excel_save)
 
 
