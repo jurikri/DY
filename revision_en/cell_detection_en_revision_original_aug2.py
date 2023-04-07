@@ -157,6 +157,7 @@ def im_mean(crop):
     p = cv2.mean(piece)
     return p[0]
 
+#%%
 def get_F1(threshold=None, contour_thr=None,\
            yhat_save=None, z_save=None, t_im=None, positive_indexs=None, polygon=None):
 
@@ -231,6 +232,13 @@ def get_F1(threshold=None, contour_thr=None,\
                 co.append((int(col),int(row)))
         else: co.append((int(col),int(row)))
         
+    dots = list(co)
+    white2 = dot_expand(height=height, width=width, dots=dots)
+    cell_positive_area = []
+    w = np.where(white2[:,:,0]==0)
+    for i in range(len(w[0])):
+        cell_positive_area.append((w[1][i],w[0][i]))
+        
     if True:
             # TN
         dots = list(co)
@@ -249,9 +257,15 @@ def get_F1(threshold=None, contour_thr=None,\
     
         Cell_n = len(co)
         Predict_n = len(pink)
-        TP = Cell_n - len(list(set(co) - set(predict_area)))
-        FP = Predict_n - TP
-        FN = Cell_n - TP
+        
+        FN = len(list(set(co) - set(predict_area)))
+        TP = Cell_n - FN
+        
+        FP = len(list(set(pink) - set(cell_positive_area)))
+        
+        if np.min([FN, TP, FP]) < 0:
+            print(threshold, contour_thr)
+            import sys; sys.exit()
     
     try:
         precision = TP/(TP+FP)
@@ -729,7 +743,7 @@ for cv in range(len(cvlist_msid)):
 # div_for_memory = 5 # 몇등분 할건지
 
 forlist3 = [0]
-for cv in range(21): # range(len(cvlist)):
+for cv in range(len(cvlist_msid)):
     # common load
     print('cv', cv)
     weight_savename = 'cv_' + str(cv) + '_total_final.h5'
@@ -861,13 +875,13 @@ for cv in range(21): # range(len(cvlist)):
 #%% 3. F1 score optimization
 
 nlist_for = list(tnlist)
-
+n_num = 0
 for n_num in range(len(nlist_for)):
     # print('F1 score optimization', n_num)
     msid = nlist_for[n_num][15:-7]
     psave = weight_savepath + 'sample_n_' + str(msid) + '.pickle'
     psave2 = weight_savepath + 'F1_parameters_' + str(msid) + '.pickle'
-    if not(os.path.isfile(psave2)) and os.path.isfile(psave):
+    if (not(os.path.isfile(psave2)) and os.path.isfile(psave)) or True:
         
         with open(psave, 'rb') as file:
             msdict = pickle.load(file)
@@ -900,10 +914,12 @@ for n_num in range(len(nlist_for)):
                 
                 if not s is None:
                     F1_score_s, _ = get_F1(threshold=threshold, contour_thr=s,\
-                                yhat_save=yhat_save, positive_indexs=positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+                                yhat_save=yhat_save, positive_indexs=positive_indexs, z_save=z_save, \
+                                t_im=t_im, polygon=polygon)
                 if not e is None:
-                    F1_score_e, _ = get_F1(threshold=threshold, contour_thr=e,\
-                                yhat_save=yhat_save, positive_indexs=positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
+                    F1_score_e, _= get_F1(threshold=threshold, contour_thr=e,\
+                                yhat_save=yhat_save, positive_indexs=positive_indexs, z_save=z_save, \
+                                t_im=t_im, polygon=polygon)
                         
                 return F1_score_s, F1_score_e
             
@@ -1072,17 +1088,19 @@ print('F1 score mean', np.mean(np.array(mssave2[:,3], dtype=float)))
 a = np.array(mssave2[:,3], dtype=float)
 vix = np.where(a!=0)[0]
 np.mean(a[vix])
-
-excel_save = weight_savepath + 'F1score_result.xls'
-mssave2_df = pd.DataFrame(mssave2, columns=['ID', 'Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'])
+#%%
+excel_save = weight_savepath + 'F1score_result_augmodel.xls'
+print(excel_save)
+mssave2_df = pd.DataFrame(np.array(mssave2[:,1:], dtype=float), \
+             columns=['Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'], \
+             index=mssave2[:,0])
 mssave2_df.to_excel(excel_save)
-
 
 
 #%% to excel -> thr 0.5 고정
 # merge_save = []
 
-nlist_for = list(nlist)
+nlist_for = list(tnlist)
 mssave2 = []
 for n_num in range(len(nlist_for)):
     msid = nlist_for[n_num][15:-7]
@@ -1127,6 +1145,7 @@ for n_num in range(len(nlist_for)):
             plt.imshow(tmp)
         #%
         threshold = 0.5
+        # contour_thr = 137
         F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
                    yhat_save=yhat_save, positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
             
@@ -1159,8 +1178,12 @@ a = np.array(mssave2[:,3], dtype=float)
 vix = np.where(a!=0)[0]
 np.mean(a[vix])
 
-excel_save = weight_savepath + 'F1score_result.xls'
-mssave2_df = pd.DataFrame(mssave2, columns=['ID', 'Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'])
+#%%
+excel_save = weight_savepath + 'F1score_result_augmodel_parameter_fixed.xls'
+print(excel_save)
+mssave2_df = pd.DataFrame(np.array(mssave2[:,1:], dtype=float), \
+             columns=['Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'], \
+             index=mssave2[:,0])
 mssave2_df.to_excel(excel_save)
 
 #%% generalization
@@ -1170,10 +1193,11 @@ mssave2_df.to_excel(excel_save)
 # 2 - 1에서 추가로 1 x 3 epoch
 # 3 - 2에서 추가로 1 x 6 eproch
 
+weight_savepath = mainpath + 'weightsave_7\\'; 
 weight_savename = 'total_total_final_2.h5'
 final_weightsave = weight_savepath + weight_savename
 
-if not(os.path.isfile(final_weightsave)) or True:
+if not(os.path.isfile(final_weightsave)):
     
     tlist = list(tnlist)
     trlist = list(set(tlist) - set())
@@ -1367,10 +1391,12 @@ def ray_F1score_cal(forlist_cpu, yhat_save=None, \
 #%% # 2. test data prep
 
 ## img load, ## resize + preproccessing
+lnn = 7
+chnum = 27
 weight_savepath = 'D:\\cell_detection_en_revision\\20230209_en_revision_original_multi_input\\dataset3\\'
 msFunction.createFolder(weight_savepath)
 
-datasetnum = 1
+datasetnum = 2
 
 if datasetnum == 1:
     cvlistsavepath = weight_savepath + 'cvlist_heejunpark.pickle'
@@ -1423,7 +1449,7 @@ for n_num in range(len(tnlist)):
             print(psave, '저장되었습니다.')
         
     psave2 = weight_savepath + 'F1_parameters_' + str(msid) + '.pickle'
-    if os.path.isfile(psave) and not(os.path.isfile(psave2)):
+    if (os.path.isfile(psave) and not(os.path.isfile(psave2))) or True:
         with open(psave, 'rb') as file:
             msdict2 = pickle.load(file)
             yhat_save = msdict2['yhat_save']
@@ -1457,7 +1483,7 @@ for n_num in range(len(tnlist)):
 
         mssave = np.array(output_ids)
         mix = np.argmax(mssave[:,2])
-        result = [cv, msid] + list(mssave[mix,:])
+        result = [0, msid] + list(mssave[mix,:])
         print('\n', 'max F1 score', result)
         
         if not(os.path.isfile(psave2)) or True:
@@ -1483,22 +1509,27 @@ for n_num in range(len(tnlist)):
         F1_score, msdict = get_F1(threshold=threshold, contour_thr=contour_thr,\
                    yhat_save=yhat_save, positive_indexs= positive_indexs, z_save=z_save, t_im=t_im, polygon=polygon)
     
-        mssave2.append(F1_score)
+        predicted_cell_n = len(msdict['los'])
+        tmp = [msid, len(msdict['co']), predicted_cell_n, F1_score, msdict['tp'], msdict['fp'], msdict['fn'], threshold, contour_thr]
+        mssave2.append(tmp)
         print(F1_score)
     
-#  psave = weight_savepath + 'sample_n_' + test_image_no + '.pickle'
 print()
-print(np.mean(mssave2))
 mssave2 = np.array(mssave2)
-vix = np.where(mssave2 > 0.2)[0]
-print(np.mean(mssave2[vix]))
-# msdict -> t_im, marker_x, marker_y, polygon, points
 #%%
 
+excel_save = weight_savepath + 'F1score_result_augmodel_sy.xls'
+print(excel_save)
+mssave2_df = pd.DataFrame(np.array(mssave2[:,1:], dtype=float), \
+             columns=['Human #', 'Model #', 'F1_score', 'TP', 'FP', 'FN', 'threshold', 'contour_thr'], \
+             index=mssave2[:,0])
+mssave2_df.to_excel(excel_save)
 
 
 
 
+# msdict -> t_im, marker_x, marker_y, polygon, points
+#%%
 
 
 
